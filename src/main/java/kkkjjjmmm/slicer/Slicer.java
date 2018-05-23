@@ -1,8 +1,21 @@
 package kkkjjjmmm.slicer;
 
+import com.github.javaparser.JavaParser;
+import com.github.javaparser.Position;
 import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.Node;
-import com.github.javaparser.ast.visitor.TreeVisitor;
+import com.github.javaparser.ast.body.BodyDeclaration;
+import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
+import com.github.javaparser.ast.body.MethodDeclaration;
+import com.github.javaparser.ast.body.VariableDeclarator;
+import com.github.javaparser.ast.expr.NameExpr;
+import com.github.javaparser.ast.expr.VariableDeclarationExpr;
+import com.github.javaparser.ast.stmt.BlockStmt;
+import com.github.javaparser.ast.visitor.ModifierVisitor;
+import com.github.javaparser.ast.visitor.Visitable;
+import com.github.javaparser.symbolsolver.JavaSymbolSolver;
+import com.github.javaparser.symbolsolver.resolution.typesolvers.CombinedTypeSolver;
+import com.github.javaparser.symbolsolver.resolution.typesolvers.ReflectionTypeSolver;
 import com.github.javaparser.utils.SourceRoot;
 import com.ibm.wala.examples.drivers.PDFSlice;
 import com.ibm.wala.examples.drivers.SlicerTest;
@@ -28,8 +41,13 @@ import com.ibm.wala.util.config.AnalysisScopeReader;
 import com.ibm.wala.util.io.FileProvider;
 import java.io.IOException;
 import java.nio.file.Paths;
+import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Iterator;
 import java.util.List;
+import java.util.Set;
+import java.util.TreeSet;
+import java.util.stream.Collectors;
 
 public class Slicer {
 
@@ -84,40 +102,46 @@ public class Slicer {
     } catch (WalaException e) {
       // something bad happened.
       e.printStackTrace();
-      return null;
+      return new ArrayList<>();
     }
   }
 
 
   public static void main(String[] args) {
     try {
-      List<Integer> statements = computeSliceStatements("example.jar", "LFoo", "main", "foo", true);
+      Set<Integer> statements = new TreeSet<>(
+          computeSliceStatements("example.jar", "LFoo", "main", "foo", true));
 
       SourceRoot srcRoot = new SourceRoot(Paths.get("example/src"));
       CompilationUnit cu = srcRoot.parse("", "Foo.java");
 
-      TreeVisitor visitor = new TreeVisitor() {
-        @Override
-        public void process(Node node) {
-          if (node instanceof com.github.javaparser.ast.stmt.Statement) {
-            // Figure out what to get and what to cast simply by looking at the AST in a debugger!
+      ModifierVisitor<Void> mv = new SlicerVisitor(statements);
+      Visitable newTree = cu.accept(mv, null);
+      System.out.println(newTree);
+      System.out.println("-------------- second pass -------------");
 
-            boolean hasBeginning = ((com.github.javaparser.ast.stmt.Statement) node).getBegin()
-                .filter(pos -> statements.contains(pos.line)).isPresent();
-            boolean hasEnd = ((com.github.javaparser.ast.stmt.Statement) node).getEnd()
-                .filter(pos -> statements.contains(pos.line)).isPresent();
+      srcRoot = new SourceRoot(Paths.get("example/src"));
+      cu = srcRoot.parse("", "Foo.java");
 
-            if (hasBeginning || hasEnd) {
-              System.out.println((com.github.javaparser.ast.stmt.Statement) node);
-            }
-
-//          return super.visit(stmt, arg);
-          }
-        }
-      };
-      visitor.visitPreOrder(cu.findRootNode());
-
-      System.out.println(statements);
+      for (MethodDeclaration newMD : ((Node) newTree).findAll(MethodDeclaration.class)) {
+        MethodDeclaration oldMD = cu.findFirst(MethodDeclaration.class,
+            md -> md.getNameAsString().equals(newMD.getNameAsString())).get();
+        List<String> sliceNameExprs = newMD.findAll(NameExpr.class).stream()
+            .map(ne -> ne.getNameAsString())
+            .collect(Collectors.toList());
+        oldMD.findAll(VariableDeclarationExpr.class).stream()
+            .forEach(vd -> {
+              for (VariableDeclarator var : vd.getVariables()) {
+                if (sliceNameExprs.contains(var.getName().asString())) {
+                  statements.add(vd.getBegin().get().line);
+                }
+              }
+            });
+      }
+      System.out.println(">> " + statements);
+      mv = new SlicerVisitor(statements);
+      newTree = cu.accept(mv, null);
+      System.out.println(newTree);
     } catch (CancelException e) {
       e.printStackTrace();
     } catch (IOException e) {
