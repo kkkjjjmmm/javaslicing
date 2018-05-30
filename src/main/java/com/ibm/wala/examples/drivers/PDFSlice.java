@@ -12,7 +12,9 @@ package com.ibm.wala.examples.drivers;
 
 import java.io.File;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Collection;
+import java.util.List;
 import java.util.Properties;
 
 import com.ibm.wala.classLoader.ShrikeBTMethod;
@@ -251,8 +253,9 @@ public class PDFSlice {
 		}
 	}
 
-	private static void dumpSourceLineNumbers(Collection<Statement> slice) {
+	public static List<Integer> dumpSourceLineNumbers(Collection<Statement> slice) {
 		System.out.println(">>>>> SLICER LINES: >>>");
+		List<Integer> statements = new ArrayList<>();
 		for (Statement s : slice) {
 			if (s.getKind() == Statement.Kind.NORMAL) { // ignore special kinds of statements
 				int bcIndex, instructionIndex = ((NormalStatement) s).getInstructionIndex();
@@ -260,6 +263,7 @@ public class PDFSlice {
 					bcIndex = ((ShrikeBTMethod) s.getNode().getMethod()).getBytecodeIndex(instructionIndex);
 					try {
 						int src_line_number = s.getNode().getMethod().getLineNumber(bcIndex);
+						statements.add(src_line_number);
 						System.err.println("Source line number = " + src_line_number);
 					} catch (Exception e) {
 						System.err.println("Bytecode index no good");
@@ -271,6 +275,7 @@ public class PDFSlice {
 				}
 			}
 		}
+		return statements;
 	}
 	/**
 	 * check that g is a well-formed graph, and that it contains exactly the number
