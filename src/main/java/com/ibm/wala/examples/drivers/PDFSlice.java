@@ -264,7 +264,7 @@ public class PDFSlice {
 					try {
 						int src_line_number = s.getNode().getMethod().getLineNumber(bcIndex);
 						statements.add(src_line_number);
-						System.err.println("Source line number = " + src_line_number);
+						System.err.println("Source line number = " + s.getNode().getMethod() + ":" + src_line_number);
 					} catch (Exception e) {
 						System.err.println("Bytecode index no good");
 						System.err.println(e.getMessage());
