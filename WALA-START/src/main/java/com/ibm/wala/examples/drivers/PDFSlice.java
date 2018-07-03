@@ -12,11 +12,15 @@ package com.ibm.wala.examples.drivers;
 
 import java.io.File;
 import java.io.IOException;
-import java.util.ArrayList;
 import java.util.Collection;
-import java.util.List;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.Properties;
+import java.util.Set;
 
+import com.google.common.collect.HashBasedTable;
+import com.google.common.collect.Table;
+import com.ibm.wala.classLoader.IMethod;
 import com.ibm.wala.classLoader.ShrikeBTMethod;
 import com.ibm.wala.examples.util.WalaExamplesProperties;
 import com.ibm.wala.ipa.callgraph.AnalysisCacheImpl;
@@ -50,6 +54,7 @@ import com.ibm.wala.types.TypeReference;
 import com.ibm.wala.util.CancelException;
 import com.ibm.wala.util.Predicate;
 import com.ibm.wala.util.WalaException;
+import com.ibm.wala.util.collections.ArraySet;
 import com.ibm.wala.util.config.AnalysisScopeReader;
 import com.ibm.wala.util.debug.Assertions;
 import com.ibm.wala.util.graph.Graph;
@@ -253,30 +258,45 @@ public class PDFSlice {
 		}
 	}
 
-	public static List<Integer> dumpSourceLineNumbers(Collection<Statement> slice) {
+	// {className -> {methodName -> [line numbers]}}
+	public static Table<String, String, Set<Integer>> dumpSourceLineNumbers(Collection<Statement> slice) {
 		System.out.println(">>>>> SLICER LINES: >>>");
-		List<Integer> statements = new ArrayList<>();
+		Table<String, String, Set<Integer>> allstatements = HashBasedTable.create();
 		for (Statement s : slice) {
-			if (s.getKind() == Statement.Kind.NORMAL) { // ignore special kinds of statements
-				int bcIndex, instructionIndex = ((NormalStatement) s).getInstructionIndex();
-				try {
-					bcIndex = ((ShrikeBTMethod) s.getNode().getMethod()).getBytecodeIndex(instructionIndex);
+			IMethod method = s.getNode().getMethod();
+			String className = method.getDeclaringClass().getName().toString();
+			String methodName = method.getSignature();
+//			if (methodName.startsWith("< Application")) {			
+				if (s.getKind() == Statement.Kind.NORMAL) { // ignore special kinds of statements
+					int bcIndex, instructionIndex = ((NormalStatement) s).getInstructionIndex();
 					try {
-						int src_line_number = s.getNode().getMethod().getLineNumber(bcIndex);
-						statements.add(src_line_number);
-						System.err.println("Source line number = " + s.getNode().getMethod() + ":" + src_line_number);
+						bcIndex = ((ShrikeBTMethod) s.getNode().getMethod()).getBytecodeIndex(instructionIndex);
+						try {
+							int src_line_number = s.getNode().getMethod().getLineNumber(bcIndex);						
+							System.err.println("Source line number = " + s.getNode().getMethod() + ":" + src_line_number);
+							if(allstatements.contains(className, methodName)) {
+								Set<Integer> statements = allstatements.get(className, methodName);
+								statements.add(src_line_number);
+								allstatements.put(className, methodName, statements);
+							}else {
+								 Set<Integer> statements = new ArraySet<Integer>();
+								 statements.add(src_line_number);
+								 allstatements.put(className, methodName, statements);
+							}
+						} catch (Exception e) {
+							System.err.println("Bytecode index no good");
+							System.err.println(e.getMessage());
+						}
 					} catch (Exception e) {
-						System.err.println("Bytecode index no good");
+						System.err.println("it's probably not a BT method (e.g. it's a fakeroot method)");
 						System.err.println(e.getMessage());
 					}
-				} catch (Exception e) {
-					System.err.println("it's probably not a BT method (e.g. it's a fakeroot method)");
-					System.err.println(e.getMessage());
 				}
-			}
+//			}			
 		}
-		return statements;
+		return allstatements;
 	}
+	
 	/**
 	 * check that g is a well-formed graph, and that it contains exactly the number
 	 * of nodes in the slice

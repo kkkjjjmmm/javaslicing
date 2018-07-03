@@ -49,7 +49,8 @@ public class SlicerVisitor extends ModifierVisitor<Void> {
   private boolean containsSliceStatement(Node node) {
     Position beginning = node.getBegin().get();
     Position end = node.getEnd().get();
-
+    
     return statements.stream().anyMatch(line -> beginning.line <= line && end.line >= line);
+
   }
 }
