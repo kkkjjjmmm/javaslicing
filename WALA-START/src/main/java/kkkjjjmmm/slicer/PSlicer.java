@@ -2,27 +2,11 @@ package kkkjjjmmm.slicer;
 
 import java.io.FileInputStream;
 import java.io.IOException;
-import java.nio.file.Paths;
-import java.util.ArrayList;
 import java.util.Collection;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
-import java.util.TreeSet;
-import java.util.stream.Collectors;
-
 import com.github.javaparser.JavaParser;
 import com.github.javaparser.ast.CompilationUnit;
-import com.github.javaparser.ast.Node;
-import com.github.javaparser.ast.body.MethodDeclaration;
-import com.github.javaparser.ast.body.VariableDeclarator;
-import com.github.javaparser.ast.expr.NameExpr;
-import com.github.javaparser.ast.expr.VariableDeclarationExpr;
-import com.github.javaparser.ast.visitor.ModifierVisitor;
-import com.github.javaparser.ast.visitor.Visitable;
-import com.github.javaparser.utils.SourceRoot;
 import com.google.common.collect.HashBasedTable;
 import com.google.common.collect.Table;
 import com.ibm.wala.examples.drivers.PDFSlice;
@@ -60,8 +44,9 @@ public class PSlicer {
 	    try {
 	      FileInputStream in = new FileInputStream(fileName);
 		  CompilationUnit cu = JavaParser.parse(in);
-	      cu.accept(new MyVisitor(srcCaller), null);
-	      //System.out.println(cu);
+	      cu.accept(new OBSVisitor(), null);
+	      cu.accept(new SVFVisitor(), null);
+	      
 	      // create an analysis scope representing the appJar as a J2SE application
 	     AnalysisScope scope = AnalysisScopeReader.makeJavaBinaryAnalysisScope(appJar,
 	          (new FileProvider()).getFile("Java60RegressionExclusions.txt"));

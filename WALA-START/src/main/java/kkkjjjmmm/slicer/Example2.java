@@ -10,12 +10,6 @@ public class Example2 {
 		x = Util.Bernoulli(0.5);
 		b = x;
 		c = Util.Bernoulli(0.5);
-		if(c) {
-			c = false;
-			while(!c) {
-				c = true;
-			}
-		}
 		while(c) {
 			b = !b;
 			c = Util.Bernoulli(0.5);

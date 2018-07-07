@@ -1,13 +1,8 @@
 package kkkjjjmmm.slicer;
 
-import java.io.FileInputStream;
-import java.io.FileNotFoundException;
 import java.util.ArrayList;
-import java.util.Iterator;
 import java.util.List;
 
-import com.github.javaparser.JavaParser;
-import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.NodeList;
 import com.github.javaparser.ast.expr.AssignExpr;
@@ -17,7 +12,6 @@ import com.github.javaparser.ast.expr.MethodCallExpr;
 import com.github.javaparser.ast.expr.NameExpr;
 import com.github.javaparser.ast.stmt.BlockStmt;
 import com.github.javaparser.ast.stmt.ExpressionStmt;
-import com.github.javaparser.ast.stmt.Statement;
 import com.github.javaparser.ast.visitor.ModifierVisitor;
 
 public class OBSVisitor extends ModifierVisitor<List<ExpressionStmt>> {
@@ -59,13 +53,5 @@ public class OBSVisitor extends ModifierVisitor<List<ExpressionStmt>> {
 //			System.out.println(block);
 		}
 		return n;
-	}
-
-	public static void main(String[] args) throws FileNotFoundException {
-		FileInputStream in = new FileInputStream(
-				"/home/jiaming/WALA/WALA-START/src/main/java/kkkjjjmmm/slicer/Example.java");
-		CompilationUnit cu = JavaParser.parse(in);
-		cu.accept(new OBSVisitor(), null);
-		System.out.println(cu);
 	}
 }

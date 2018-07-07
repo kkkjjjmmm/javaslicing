@@ -23,7 +23,7 @@ public class Example {
 		g = d||g;
 		g = Yeah.negate(g);
 		Util.Observe(d);
-	
+		
 		//d = true;
 		if(!i) {
 			s = Util.Bernoulli(0.2);
@@ -42,6 +42,9 @@ public class Example {
 	}
 	
 	public static boolean fake(boolean b) {
+		{
+			System.out.println("foo");
+		}
 		return b;
 	}
 }
