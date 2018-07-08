@@ -118,7 +118,15 @@ public class SVFVisitor extends ModifierVisitor<Map<Statement, Statement>> {
 			return n;
 		}
 		Expression obsArg = args.get(0);
-		if (obsArg instanceof NameExpr) {
+		if(!(obsArg instanceof NameExpr)) {
+			try {
+				throw new Exception("The argument of Observe method must be a NameExpression.");
+			} catch (Exception e) {
+				e.printStackTrace();
+			}
+		}
+		
+		if (obsArg instanceof NameExpr && arg != null) {
 			NameExpr variableInsideObs = (NameExpr) obsArg;
 			String newVarName = SVFname + SVFi++;
 			ExpressionStmt extractedArgument = new ExpressionStmt(
@@ -127,7 +135,10 @@ public class SVFVisitor extends ModifierVisitor<Map<Statement, Statement>> {
 			Node node = n.getParentNode().get();
 			arg.put((ExpressionStmt) node, extractedArgument);
 			n.setArgument(0, new NameExpr(newVarName));
-		}
+		}else {
+			System.err.println("The Argument of the Observe method must be a Name Expression.");
+		}		
+
 		return n;
 	}
 

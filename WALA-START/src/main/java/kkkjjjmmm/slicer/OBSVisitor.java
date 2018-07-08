@@ -32,8 +32,8 @@ public class OBSVisitor extends ModifierVisitor<List<ExpressionStmt>> {
 		return n;
 	}
 	
-	@Override
-	public Node visit(final MethodCallExpr n, final List<ExpressionStmt> arg) {
+	
+	public Node visit(final MethodCallExpr n, final List<ExpressionStmt> arg){
 		String name = n.getName().asString();
 		if (!name.equals("Observe")) {
 			return n;
@@ -44,14 +44,19 @@ public class OBSVisitor extends ModifierVisitor<List<ExpressionStmt>> {
 			return n;
 		}
 		Expression obsArg = args.get(0);
+	
+		
 		if (obsArg instanceof NameExpr && arg != null) {
 			NameExpr variableInsideObs = (NameExpr) obsArg;
-			arg.add(new ExpressionStmt(new AssignExpr(
-							variableInsideObs,
-		    			    new BooleanLiteralExpr(true),AssignExpr.Operator.ASSIGN)));			
+			arg.add(new ExpressionStmt(
+					new AssignExpr(variableInsideObs, new BooleanLiteralExpr(true), AssignExpr.Operator.ASSIGN)));
+		}else {
+			System.err.println("The Argument of the Observe method must be a Name Expression.");
+		}
+				
 //			BlockStmt block = n.getAncestorOfType(BlockStmt.class).get();
 //			System.out.println(block);
-		}
+		//}
 		return n;
 	}
 }
