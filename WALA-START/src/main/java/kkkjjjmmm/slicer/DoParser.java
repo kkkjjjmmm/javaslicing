@@ -1,5 +1,6 @@
 package kkkjjjmmm.slicer;
 
+import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.nio.file.FileSystems;
@@ -16,8 +17,17 @@ public class DoParser {
 		CompilationUnit cu = JavaParser.parse(in);
 		cu.accept(new OBSVisitor(), null);
 		cu.accept(new SVFVisitor(), null);
+		File dir = new File(args[1].substring(0, args[1].lastIndexOf('/')+1));
+		if(!dir.exists()) {
+			dir.mkdir();
+		}
+		File file = new File(args[1]);
+		if(!file.exists()){
+			file.createNewFile();
+		}
+		cu.setPackageDeclaration("kkkjjjmmm.modified");
 		byte[] bArray = cu.toString().getBytes();
-		Path p = FileSystems.getDefault().getPath(args[0]);
+		Path p = FileSystems.getDefault().getPath(args[1]);
 		Files.write(p, bArray);
 		
 	}

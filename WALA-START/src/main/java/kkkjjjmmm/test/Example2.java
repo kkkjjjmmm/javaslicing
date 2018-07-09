@@ -1,4 +1,6 @@
-package kkkjjjmmm.slicer;
+package kkkjjjmmm.test;
+
+import kkkjjjmmm.slicer.Util;
 
 public class Example2 {
 	public static void main(String[] args) {

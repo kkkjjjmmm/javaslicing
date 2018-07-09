@@ -1,4 +1,7 @@
-package kkkjjjmmm.slicer;
+package kkkjjjmmm.test;
+
+import kkkjjjmmm.slicer.Util;
+import kkkjjjmmm.slicer.Yeah;
 
 public class Example {
 	
