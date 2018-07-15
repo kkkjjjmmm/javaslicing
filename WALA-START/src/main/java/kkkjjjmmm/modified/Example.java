@@ -1,7 +1,6 @@
 package kkkjjjmmm.modified;
 
 import kkkjjjmmm.slicer.Util;
-import kkkjjjmmm.slicer.Yeah;
 
 public class Example {
 
@@ -32,12 +31,11 @@ public class Example {
                 }
             }
         }
-        g = d || g;
-        g = Yeah.negate(g);
         {
-            boolean variable4 = d;
+            boolean variable4 = g == false;
+            // g = Yeah.negate(g);
             Util.Observe(variable4);
-            d = true;
+            g = false;
         }
         {
             boolean variable5 = !i;
