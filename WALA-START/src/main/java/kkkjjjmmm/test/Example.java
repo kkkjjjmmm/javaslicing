@@ -1,7 +1,7 @@
 package kkkjjjmmm.test;
 
 import kkkjjjmmm.slicer.Util;
-import kkkjjjmmm.slicer.Yeah;
+//import kkkjjjmmm.slicer.Yeah;
 
 public class Example {
 	
@@ -23,9 +23,10 @@ public class Example {
 		}else {
 			g = Util.Bernoulli(0.5);
 		}
-		g = d||g;
-		g = Yeah.negate(g);
-		Util.Observe(d);
+		
+		//g = d||g;
+		//g = Yeah.negate(g);
+		Util.Observe(g == false);
 		
 		//d = true;
 		if(!i) {
@@ -45,9 +46,6 @@ public class Example {
 	}
 	
 	public static boolean fake(boolean b) {
-		{
-			System.out.println("foo");
-		}
 		return b;
 	}
 }

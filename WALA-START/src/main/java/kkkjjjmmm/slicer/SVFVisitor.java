@@ -1,14 +1,10 @@
 package kkkjjjmmm.slicer;
 
-import java.io.FileInputStream;
-import java.io.FileNotFoundException;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
-import com.github.javaparser.JavaParser;
-import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.NodeList;
 import com.github.javaparser.ast.expr.AssignExpr;
@@ -28,8 +24,7 @@ public class SVFVisitor extends ModifierVisitor<Map<Statement, Statement>> {
 
 	String SVFname = "variable";
 	int SVFi = 1;
-	
-	
+
 	@Override
 	public Node visit(BlockStmt n, final Map<Statement, Statement> arg) {
 		Map<Statement, Statement> extractedConditions = new HashMap<>();
@@ -40,11 +35,10 @@ public class SVFVisitor extends ModifierVisitor<Map<Statement, Statement>> {
 			NodeList<Statement> updatedSVFStatements = new NodeList<>();
 
 			for (Statement stmt : blockStatements) {
-				//TODO the hashes of identical nodes do not match!
-				Optional<Map.Entry<Statement,Statement>> extracted = extractedConditions.entrySet().stream()
-				.filter(entry -> entry.getKey().toString().equals(stmt.toString()))
-				.findFirst();
-				
+				// TODO the hashes of identical nodes do not match!
+				Optional<Map.Entry<Statement, Statement>> extracted = extractedConditions.entrySet().stream()
+						.filter(entry -> entry.getKey().toString().equals(stmt.toString())).findFirst();
+
 				if (extracted.isPresent()) {
 					updatedSVFStatements.add(extracted.get().getValue());
 				}
@@ -54,16 +48,14 @@ public class SVFVisitor extends ModifierVisitor<Map<Statement, Statement>> {
 		}
 		return n;
 	}
-	
-	
+
 	// Map<Node,Node> if() -> q1 = !i && !d
 	@Override
-	public Node visit(IfStmt n, final Map<Statement,Statement> arg) {
+	public Node visit(IfStmt n, final Map<Statement, Statement> arg) {
 		super.visit(n, arg);
 		Expression condition = n.getCondition();
 		BlockStmt newb = new BlockStmt();
-		
-		//if (!condition.isNameExpr()) { //TODO double-check this condition
+
 		String newVarName = SVFname + SVFi++;
 		ExpressionStmt extractedCondition = new ExpressionStmt(
 				new AssignExpr(new VariableDeclarationExpr(PrimitiveType.booleanType(), newVarName), condition,
@@ -74,19 +66,13 @@ public class SVFVisitor extends ModifierVisitor<Map<Statement, Statement>> {
 		newb.addStatement(extractedCondition);
 		newb.addStatement(cloned);
 		return newb;
-		//}
-		
-		//return n;
 	}
 
-	
 	@Override
 	public Node visit(WhileStmt n, final Map<Statement, Statement> arg) {
 		super.visit(n, arg);
 		Expression condition = n.getCondition();
-		BlockStmt newb = new BlockStmt();
-		BlockStmt whileBody = new BlockStmt();
-		//if(!condition.isNameExpr()) {
+		BlockStmt whileWrapper = new BlockStmt();
 		String newVarName = SVFname + SVFi++;
 		ExpressionStmt extractedCondition = new ExpressionStmt(
 				new AssignExpr(new VariableDeclarationExpr(PrimitiveType.booleanType(), newVarName), condition,
@@ -94,18 +80,26 @@ public class SVFVisitor extends ModifierVisitor<Map<Statement, Statement>> {
 		WhileStmt cloned = n.clone();
 		arg.put(cloned, extractedCondition);
 		cloned.setCondition(new NameExpr(newVarName));
-
-		whileBody.addStatement(cloned);
-		whileBody.addStatement(
-				new ExpressionStmt(new AssignExpr(new NameExpr(newVarName), condition, AssignExpr.Operator.ASSIGN)));
-		newb.addStatement(extractedCondition);
-		newb.addStatement(whileBody.toString());
-		return newb;
-		//}
-		//return n;
+		Statement whileBody = cloned.getBody();
+		if (whileBody instanceof BlockStmt) {
+			BlockStmt blockInsideWhile = (BlockStmt) whileBody;
+			blockInsideWhile.addStatement(new ExpressionStmt(
+					new AssignExpr(new NameExpr(newVarName), condition, AssignExpr.Operator.ASSIGN)));
+		} else {
+			//TODO handle single-statement while loops, e.g.: 
+			//  while(iterator.hasNext())
+			//    doSomething()
+			BlockStmt newb = new BlockStmt();
+			newb.addStatement(whileBody);
+			newb.addStatement(new ExpressionStmt(
+					new AssignExpr(new NameExpr(newVarName), condition, AssignExpr.Operator.ASSIGN)));
+			cloned.setBody(newb);
+		}
+		whileWrapper.addStatement(extractedCondition);
+		whileWrapper.addStatement(cloned);
+		return whileWrapper;
 	}
 
-		
 	@Override
 	public Node visit(MethodCallExpr n, final Map<Statement, Statement> arg) {
 		String name = n.getName().asString();
@@ -118,37 +112,22 @@ public class SVFVisitor extends ModifierVisitor<Map<Statement, Statement>> {
 			return n;
 		}
 		Expression obsArg = args.get(0);
-		if(!(obsArg instanceof NameExpr)) {
-			try {
-				throw new Exception("The argument of Observe method must be a NameExpression.");
-			} catch (Exception e) {
-				e.printStackTrace();
-			}
-		}
-		
-		if (obsArg instanceof NameExpr && arg != null) {
-			NameExpr variableInsideObs = (NameExpr) obsArg;
-			String newVarName = SVFname + SVFi++;
-			ExpressionStmt extractedArgument = new ExpressionStmt(
-					new AssignExpr(new VariableDeclarationExpr(PrimitiveType.booleanType(), newVarName), variableInsideObs,
-							AssignExpr.Operator.ASSIGN));
-			Node node = n.getParentNode().get();
-			arg.put((ExpressionStmt) node, extractedArgument);
-			n.setArgument(0, new NameExpr(newVarName));
-		}else {
-			System.err.println("The Argument of the Observe method must be a Name Expression.");
-		}		
+
+		//if (obsArg instanceof NameExpr && arg != null) {
+			//NameExpr variableInsideObs = (NameExpr) obsArg;
+		String newVarName = SVFname + SVFi++;
+		// ExpressionStmt extractedArgument = new ExpressionStmt(
+		// new AssignExpr(new VariableDeclarationExpr(PrimitiveType.booleanType(),
+		// newVarName),
+		// variableInsideObs, AssignExpr.Operator.ASSIGN));
+		ExpressionStmt extractedArgument = new ExpressionStmt(
+				new AssignExpr(new VariableDeclarationExpr(PrimitiveType.booleanType(), newVarName), 
+						obsArg,AssignExpr.Operator.ASSIGN));
+		Node node = n.getParentNode().get();
+		arg.put((ExpressionStmt) node, extractedArgument);
+		n.setArgument(0, new NameExpr(newVarName));
+		//}
 
 		return n;
-	}
-
-	
-	public static void main(String[] args) throws FileNotFoundException {
-		FileInputStream in = new FileInputStream(
-				"/home/jiaming/WALA/WALA-START/src/main/java/kkkjjjmmm/slicer/Example2.java");
-		CompilationUnit cu = JavaParser.parse(in);
-		cu.accept(new OBSVisitor(),null);
-		cu.accept(new SVFVisitor(), null);
-		System.out.println(cu);
 	}
 }
