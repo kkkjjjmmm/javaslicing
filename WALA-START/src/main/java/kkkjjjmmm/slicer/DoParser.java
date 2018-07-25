@@ -6,6 +6,7 @@ import java.io.IOException;
 import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 
 import com.github.javaparser.JavaParser;
 import com.github.javaparser.ast.CompilationUnit;
@@ -15,28 +16,32 @@ public class DoParser {
 	/* keep all the arguments as string
 	 * args[0] the absolute path of the original file that you write 
 	 * e.g. "/home/jiaming/WALA/WALA-START/src/main/java/kkkjjjmmm/test/Example.java"
-	 * args[1] the absolute path of the modified file, keep the same class name of your original file
-	 * e.g. "/home/jiaming/WALA/WALA-START/src/main/java/kkkjjjmmm/modified/Example.java"
+	 * args[1] the output folder where the transformed source file will be written
+	 * e.g. "/home/jiaming/WALA/WALA-START/output"
 	 * args[2] the package of your modified file 
 	 * e.g. "kkkjjjmmm.modified"
 	 * */
 	public static void main(String[] args) throws IOException, InterruptedException{		
-		FileInputStream in = new FileInputStream(args[0]);
+		String inputName = args[0];
+		FileInputStream in = new FileInputStream(inputName);
 		CompilationUnit cu = JavaParser.parse(in);
 		cu.accept(new OBSVisitor(), null);
 		cu.accept(new SVFVisitor(), null);
-		File dir = new File(args[1].substring(0, args[1].lastIndexOf('/')+1));
-		if(!dir.exists()) {
-			dir.mkdir();
+		
+		File output = new File(args[1]);
+		if (!output.isDirectory()) {
+			throw new RuntimeException(output + " is not a directory");
 		}
-		File file = new File(args[1]);
-		if(!file.exists()){
-			file.createNewFile();
-		}
-		cu.setPackageDeclaration(args[2]);
+		
+		String packageDec = cu.getPackageDeclaration().get().getNameAsString();
+		String className = inputName.substring(inputName.lastIndexOf('/') + 1);
+		File outputFile = new File(output,packageDec.replace('.', '/') + "/" + className);
+		System.out.println(outputFile);
+		
 		byte[] bArray = cu.toString().getBytes();
-		Path p = FileSystems.getDefault().getPath(args[1]);
-		Files.write(p, bArray);
+		Path pathToOutput = Paths.get(outputFile.toURI());
+		Files.createDirectories(pathToOutput.getParent());
+		Files.write(pathToOutput, bArray);
 		
 //		ProcessBuilder pb = new ProcessBuilder();
 //		pb.command("jar", "-cvf", "Example.jar", "Example.class");

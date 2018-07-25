@@ -16,6 +16,7 @@ public class Example2 {
 			b = !b;
 			c = Util.Bernoulli(0.5);
 		}
+		
 		b = fake(b);
 		Util.Observe(b);
 		return x;

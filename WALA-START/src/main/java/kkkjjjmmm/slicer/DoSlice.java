@@ -29,6 +29,9 @@ import com.ibm.wala.ipa.slicer.SDG;
 import com.ibm.wala.ipa.slicer.Slicer.ControlDependenceOptions;
 import com.ibm.wala.ipa.slicer.Slicer.DataDependenceOptions;
 import com.ibm.wala.ipa.slicer.Statement;
+import com.ibm.wala.ssa.IR;
+import com.ibm.wala.ssa.ISSABasicBlock;
+import com.ibm.wala.ssa.SSAInstruction;
 import com.ibm.wala.util.CancelException;
 import com.ibm.wala.util.WalaException;
 import com.ibm.wala.util.config.AnalysisScopeReader;
@@ -37,6 +40,7 @@ import com.ibm.wala.util.io.FileProvider;
 import java.io.IOException;
 import java.nio.file.Paths;
 import java.util.Collection;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
@@ -44,7 +48,7 @@ import java.util.Set;
 import java.util.TreeSet;
 import java.util.stream.Collectors;
 
-public class Slicer {
+public class DoSlice {
 
 	private static final DataDependenceOptions D_OPTIONS = DataDependenceOptions.FULL;
 	private static final ControlDependenceOptions C_OPTIONS = ControlDependenceOptions.NO_EXCEPTIONAL_EDGES;
@@ -75,7 +79,16 @@ public class Slicer {
 			CGNode callerNode = SlicerTest.findMethod(cg, srcCaller);
 			Statement s = SlicerTest.findCallTo(callerNode, srcCallee);
 			System.err.println("Statement: " + s);
-
+//			
+//			IR ir = callerNode.getIR();
+//			Iterator<SSAInstruction> it = ir.iterateAllInstructions();
+//			while(it.hasNext()) {
+//				SSAInstruction ins = it.next();
+//				if(ins.toString().contains("Observe")) {
+//					ISSABasicBlock block = ir.getBasicBlockForInstruction(ins);
+//					System.out.println(block.getNumber());
+//				}
+//			}
 			// compute the slice as a collection of statements
 			Collection<Statement> slice = null;
 			if (goBackward) {

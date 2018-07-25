@@ -13,8 +13,6 @@ package com.ibm.wala.examples.drivers;
 import java.io.File;
 import java.io.IOException;
 import java.util.Collection;
-import java.util.LinkedHashMap;
-import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
 
@@ -265,8 +263,7 @@ public class PDFSlice {
 		for (Statement s : slice) {
 			IMethod method = s.getNode().getMethod();
 			String className = method.getDeclaringClass().getName().toString();
-			String methodName = method.getSignature();
-//			if (methodName.startsWith("< Application")) {			
+			String methodName = method.getSignature();			
 				if (s.getKind() == Statement.Kind.NORMAL) { // ignore special kinds of statements
 					int bcIndex, instructionIndex = ((NormalStatement) s).getInstructionIndex();
 					try {
@@ -291,8 +288,7 @@ public class PDFSlice {
 						System.err.println("it's probably not a BT method (e.g. it's a fakeroot method)");
 						System.err.println(e.getMessage());
 					}
-				}
-//			}			
+				}		
 		}
 		return allstatements;
 	}

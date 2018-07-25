@@ -15,6 +15,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.Iterator;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -1269,6 +1270,8 @@ public class PDG<T extends InstanceKey> implements NumberedGraph<Statement> {
   public boolean isControlDependend(Statement from, Statement to) {
     return delegate.hasEdge(from, to, Dependency.CONTROL_DEP);
   }
-/** END Custom change: control deps */
+/** END Custom change: control deps 
+ * @return */
+  
 }
 
