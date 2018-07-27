@@ -13,6 +13,7 @@ package com.ibm.wala.ipa.slicer;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedHashSet;
@@ -327,81 +328,66 @@ public class Slicer {
 
     private final boolean backward;
 
-    // TODO store observe variables in a set here
-    private final Set<String> observevariable= new HashSet<String>();
-    private final Set<String> returnvariable= new HashSet<String>();
-    
-	public SliceProblem(Collection<Statement> roots, ISDG sdg, boolean backward) {
-		this.roots = roots;
-		this.backward = backward;
-		SDGSupergraph forwards = new SDGSupergraph(sdg, backward);
-		// TODO add INF(O,G) to forwards
-		if (backward)
-			this.supergraph = BackwardsSupergraph.make(forwards);
-		else
-			this.supergraph = forwards;
-		f = new SliceFunctions();
+    public SliceProblem(Collection<Statement> roots, ISDG sdg, boolean backward) {
+      this.roots = roots;
+      this.backward = backward;
 
-		// TODO compute observe variables here		
-		Iterator<Statement> it = roots.iterator();
-		while (it.hasNext()) {
-			Statement statement = it.next();
-			IR ir = statement.getNode().getIR();
-			Iterator<SSAInstruction> it1 = ir.iterateAllInstructions();
-			List<Statement> ll = new ArrayList<Statement>();
-			
-			while (it1.hasNext()) {
-				SSAInstruction instruction = it1.next();
-				int index = instruction.iindex;
-				Statement src = ssaInstruction2Statement(statement.getNode(),instruction, index, ir);
-				ll.add(src);
-				
-				if (instruction.toString().contains("Observe")) {
-					List<String> list = new ArrayList<>();
-					for(int i = 0; i< index ; i++) {
-						String[] s = ir.getLocalNames(index, i);
-						if(s!=null) {
-							for (String ss : s) {
-								System.out.println(index + ":" + i + ":" + ss);
-								list.add(ss);
-							}
-						}					
-					}
-					observevariable.add(list.get(list.size()-1));
-				}	
-				
-				if(src.equals(statement)) {
-					List<String> list = new ArrayList<>();
-					for (int i = 0; i < index; i++) {
-						String[] s = ir.getLocalNames(index, i);
-						if (s != null) {
-							for (String ss : s) {
-								list.add(ss);
-							}
-						}
-					}
-					returnvariable.add(list.get(list.size() - 1));
-				}				
-			}			
-			
-			PDG pdg = sdg.getPDG(statement.getNode());
-			for(int i=0;i<ll.size();i++) {
-				Statement srcbegin = ll.get(i);
-				for(int j=0;j<ll.size();j++) {
-					Statement srcend = ll.get(j);
-					if(pdg.hasEdge(srcbegin, srcend)) {
-						//System.out.println("edge begin " + srcbegin + "edge end " + srcend);
-					}
-				}
-			}
-			
-			//according to the rules about how to calculate the influencers of the return variables
-			//one big question is how to get the edges in the pdg?
-			//if get the edges of the pdg, then iterate all the edges
-			//if the edge equals 
-			//System.out.println(pdg.containsNode(statement));
-		}
-	}
+      // TODO add dependencies to PDG
+      // TODO handle programs with multiple functions
+      Statement returnStmt = null;
+      Set<Statement> defObserveVariables = new HashSet<>();
+      
+      // see section 4.1 (influencers) for more details
+      Iterator<Statement> rootIt = roots.iterator();
+      while (rootIt.hasNext()) {
+
+        Statement statement = rootIt.next();
+        IR ir = statement.getNode().getIR();
+        DefUse df = new DefUse(ir);
+        Iterator<SSAInstruction> instructionIt = ir.iterateAllInstructions();
+
+        // compute return/observe variables
+        while (instructionIt.hasNext()) {
+          SSAInstruction instruction = instructionIt.next();
+          if (instruction instanceof SSAInvokeInstruction) {
+            String signature = ((SSAInvokeInstruction) instruction)
+                .getDeclaredTarget()
+                .getSignature();
+            if (signature.contains("observe")) { // TODO use the proper signature
+              assert instruction.getNumberOfUses() > 0;
+              assert ((SSAInvokeInstruction) instruction).getNumberOfParameters() > 0;
+              int argValue = instruction.getUse(0); // observe parameter
+              SSAInstruction parameterDefinition = df.getDef(argValue);
+
+              // see https://github.com/wala/WALA/wiki/Slicer#api for details
+              Statement parameterDefStatement = new NormalStatement(statement.getNode(),
+                  parameterDefinition.iindex);
+              defObserveVariables.add(parameterDefStatement);
+            } else if (signature.contains("fake")) { // TODO also use the proper signature here
+              assert returnStmt == null; // only want to write it once
+              assert instruction.getNumberOfDefs() > 0;
+              assert ((SSAInvokeInstruction) instruction).getNumberOfParameters() > 0;
+
+              // not the real "return" from the method, just our slicing criteria
+              returnStmt = new NormalStatement(statement.getNode(),
+                  instruction.iindex);
+            }
+          }
+        }
+      }
+      assert returnStmt != null;
+      // compute INF(O,G), populate pdg
+      for (Statement defObserveVar : defObserveVariables) {
+        sdg.addEdge(defObserveVar, returnStmt);
+      }
+      
+      SDGSupergraph forwards = new SDGSupergraph(sdg, backward);
+      if (backward)
+        this.supergraph = BackwardsSupergraph.make(forwards);
+      else
+        this.supergraph = forwards;
+      this.f = new SliceFunctions();
+    }
 	
 	public static synchronized Statement ssaInstruction2Statement(CGNode node, SSAInstruction s,
 		      Integer instructionIndices, IR ir) {
