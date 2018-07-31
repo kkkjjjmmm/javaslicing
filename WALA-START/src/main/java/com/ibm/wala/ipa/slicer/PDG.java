@@ -1054,7 +1054,7 @@ public class PDG<T extends InstanceKey> implements NumberedGraph<Statement> {
   public String toString() {
     populate();
     StringBuffer result = new StringBuffer("PDG for " + node + ":\n");
-    result.append(super.toString());
+    result.append(delegate.toString());
     return result.toString();
   }
 
@@ -1208,7 +1208,8 @@ public class PDG<T extends InstanceKey> implements NumberedGraph<Statement> {
 
   @Override
   public void addEdge(Statement src, Statement dst) {
-    Assertions.UNREACHABLE();
+	  delegate.addEdge(src, dst);
+    //Assertions.UNREACHABLE();
   }
 
   @Override

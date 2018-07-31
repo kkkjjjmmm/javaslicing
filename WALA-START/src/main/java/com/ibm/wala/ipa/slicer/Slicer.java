@@ -10,16 +10,22 @@
  *******************************************************************************/
 package com.ibm.wala.ipa.slicer;
 
-import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.Iterator;
-import java.util.LinkedHashSet;
-import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collector;
+import java.util.stream.Collectors;
 
+import com.google.common.collect.HashBasedTable;
+import com.google.common.collect.HashMultimap;
+import com.google.common.collect.Maps;
+import com.google.common.collect.Multimap;
+import com.google.common.collect.Multimaps;
+import com.google.common.graph.GraphBuilder;
+import com.google.common.graph.MutableGraph;
 import com.ibm.wala.dataflow.IFDS.BackwardsSupergraph;
 import com.ibm.wala.dataflow.IFDS.IMergeFunction;
 import com.ibm.wala.dataflow.IFDS.IPartiallyBalancedFlowFunctions;
@@ -35,20 +41,21 @@ import com.ibm.wala.ipa.callgraph.CallGraph;
 import com.ibm.wala.ipa.callgraph.propagation.InstanceKey;
 import com.ibm.wala.ipa.callgraph.propagation.PointerAnalysis;
 import com.ibm.wala.ipa.modref.ModRef;
-import com.ibm.wala.shrikeCT.InvalidClassFileException;
 import com.ibm.wala.ssa.DefUse;
 import com.ibm.wala.ssa.IR;
 import com.ibm.wala.ssa.ISSABasicBlock;
 import com.ibm.wala.ssa.SSAGetCaughtExceptionInstruction;
 import com.ibm.wala.ssa.SSAInstruction;
-import com.ibm.wala.ssa.SSAInstruction.IVisitor;
 import com.ibm.wala.ssa.SSAInvokeInstruction;
 import com.ibm.wala.ssa.SSAPhiInstruction;
 import com.ibm.wala.ssa.SSAPiInstruction;
 import com.ibm.wala.util.CancelException;
 import com.ibm.wala.util.MonitorUtil.IProgressMonitor;
 import com.ibm.wala.util.collections.HashSetFactory;
+import com.ibm.wala.util.collections.MultiMap;
 import com.ibm.wala.util.debug.Assertions;
+import com.ibm.wala.util.intset.IntIterator;
+import com.ibm.wala.util.intset.IntSet;
 
 /**
  * A demand-driven context-sensitive slicer.
@@ -248,6 +255,48 @@ public class Slicer {
     if (sdg == null) {
       throw new IllegalArgumentException("sdg cannot be null");
     }
+    
+    Map<Statement, Integer> nodeIndices = Maps.newHashMap();
+    MutableGraph<Statement> graph = GraphBuilder.directed().build();
+    
+    //Iterator<Statement> iterator = sdg.getNodeManager().iterator();
+    final int maxNodeId = sdg.getMaxNumber();
+    //while(iterator.hasNext()) {
+    for(int nodeId = 0; nodeId<=maxNodeId; nodeId++) {
+    	Statement node = (Statement) sdg.getNode(nodeId);//iterator.next();
+    	IntSet successors = sdg.getPredNodeNumbers(node);
+    	IntIterator successorIndices = successors.intIterator();
+    	while(successorIndices.hasNext()) {		
+    		int successorId = successorIndices.next();
+    		Statement destinationNode = (Statement) sdg.getNode(successorId);
+    		if(!node.equals(destinationNode)) {
+    			nodeIndices.put(node, nodeId);
+    			nodeIndices.put(destinationNode, successorId);
+    			graph.putEdge(node, destinationNode);
+    		}
+    	}
+    }
+    //TODO Quick and dirty filtering of observe nodes based on string representaion
+    Set<Statement> observeNodes = graph.nodes().stream().filter(n -> n.toString().contains("Observe(Z)")).collect(Collectors.toSet());
+    
+    Multimap<Statement, Statement> newEdges = HashMultimap.create();
+    
+    for(Statement observeNode : observeNodes) {
+    	final int observeNodeId = nodeIndices.get(observeNode);
+    	Set<Statement> predecessors = graph.predecessors(observeNode);
+    	for(Statement predecessor : predecessors) {
+    		Set<Statement> successors = graph.successors(predecessor);
+    		successors = successors.stream().filter(n -> nodeIndices.get(n)>observeNodeId).collect(Collectors.toSet());
+    		for(Statement successor : successors) {
+    			//Adding dependence between observe node and the successors of observeNode's predecessors having index larger than the index of observeNode (i.e., they came later in the execution)
+    			newEdges.put(observeNode, successor);
+    		}
+    	}
+    } 
+    
+    newEdges.entries().stream().forEach(e -> graph.putEdge(e.getKey(), e.getValue()));
+    
+    //System.out.println("GRAPH: "+graph);
     return new Slicer().slice(sdg, ss, backward);
   }
 
@@ -327,105 +376,113 @@ public class Slicer {
 
     private final boolean backward;
 
-    // TODO store observe variables in a set here
-    private final Set<String> observevariable= new HashSet<String>();
-    private final Set<String> returnvariable= new HashSet<String>();
-    
-	public SliceProblem(Collection<Statement> roots, ISDG sdg, boolean backward) {
-		this.roots = roots;
-		this.backward = backward;
-		SDGSupergraph forwards = new SDGSupergraph(sdg, backward);
-		// TODO add INF(O,G) to forwards
-		if (backward)
-			this.supergraph = BackwardsSupergraph.make(forwards);
-		else
-			this.supergraph = forwards;
-		f = new SliceFunctions();
+    public SliceProblem(Collection<Statement> roots, ISDG sdg, boolean backward) {
+      this.roots = roots;
+      this.backward = backward;
 
-		// TODO compute observe variables here		
-		Iterator<Statement> it = roots.iterator();
-		while (it.hasNext()) {
-			Statement statement = it.next();
-			IR ir = statement.getNode().getIR();
-			Iterator<SSAInstruction> it1 = ir.iterateAllInstructions();
-			List<Statement> ll = new ArrayList<Statement>();
-			
-			while (it1.hasNext()) {
-				SSAInstruction instruction = it1.next();
-				int index = instruction.iindex;
-				Statement src = ssaInstruction2Statement(statement.getNode(),instruction, index, ir);
-				ll.add(src);
-				
-				if (instruction.toString().contains("Observe")) {
-					List<String> list = new ArrayList<>();
-					for(int i = 0; i< index ; i++) {
-						String[] s = ir.getLocalNames(index, i);
-						if(s!=null) {
-							for (String ss : s) {
-								System.out.println(index + ":" + i + ":" + ss);
-								list.add(ss);
-							}
-						}					
-					}
-					observevariable.add(list.get(list.size()-1));
-				}	
-				
-				if(src.equals(statement)) {
-					List<String> list = new ArrayList<>();
-					for (int i = 0; i < index; i++) {
-						String[] s = ir.getLocalNames(index, i);
-						if (s != null) {
-							for (String ss : s) {
-								list.add(ss);
-							}
-						}
-					}
-					returnvariable.add(list.get(list.size() - 1));
-				}				
-			}			
-			
-			PDG pdg = sdg.getPDG(statement.getNode());
-			for(int i=0;i<ll.size();i++) {
-				Statement srcbegin = ll.get(i);
-				for(int j=0;j<ll.size();j++) {
-					Statement srcend = ll.get(j);
-					if(pdg.hasEdge(srcbegin, srcend)) {
-						//System.out.println("edge begin " + srcbegin + "edge end " + srcend);
-					}
-				}
-			}
-			
-			//according to the rules about how to calculate the influencers of the return variables
-			//one big question is how to get the edges in the pdg?
-			//if get the edges of the pdg, then iterate all the edges
-			//if the edge equals 
-			//System.out.println(pdg.containsNode(statement));
-		}
-	}
-	
-	public static synchronized Statement ssaInstruction2Statement(CGNode node, SSAInstruction s,
-		      Integer instructionIndices, IR ir) {
-		    if (node == null) {
-		      throw new IllegalArgumentException("null node");
-		    }
-		    if (s == null) {
-		      throw new IllegalArgumentException("null s");
-		    }
-		    if (s instanceof SSAPhiInstruction) {
-		      SSAPhiInstruction phi = (SSAPhiInstruction) s;
-		      return new PhiStatement(node, phi);
-		    } else if (s instanceof SSAPiInstruction) {
-		      SSAPiInstruction pi = (SSAPiInstruction) s;
-		      return new PiStatement(node, pi);
-		    } else if (s instanceof SSAGetCaughtExceptionInstruction) {
-		      return new GetCaughtExceptionStatement(node, ((SSAGetCaughtExceptionInstruction) s));
-		    } else {
-		      if (instructionIndices == null) {
-		        Assertions.UNREACHABLE(s.toString() + "\nnot found in map of\n" + ir);
-		      }
-		      return new NormalStatement(node, instructionIndices.intValue());
-		    }
-		  }
+      // TODO add dependencies to PDG
+      // TODO handle programs with multiple functions
+      Statement returnStmt = null;
+      Set<Statement> defObserveVariables = new HashSet<>();
+      
+      // see section 4.1 (influencers) for more details
+      Iterator<Statement> rootIt = roots.iterator();
+      while (rootIt.hasNext()) {
+
+        Statement statement = rootIt.next();
+        IR ir = statement.getNode().getIR();
+        DefUse df = new DefUse(ir);
+        Iterator<SSAInstruction> instructionIt = ir.iterateAllInstructions();
+        
+        //compute the callee method signature
+        int beginIndex = statement.toString().indexOf("<"); 
+        int endIndex =  statement.toString().indexOf(">") + 1;
+        String calleeMethodSignature = statement.toString().substring(beginIndex, endIndex);
+        beginIndex = calleeMethodSignature.indexOf("L")+1;
+        endIndex = calleeMethodSignature.lastIndexOf(" ");
+        calleeMethodSignature = calleeMethodSignature.substring(beginIndex, endIndex);
+        calleeMethodSignature = calleeMethodSignature.replace("/", ".");
+        calleeMethodSignature = calleeMethodSignature.replace(", ", ".");
+        
+        // compute return/observe variables
+        while (instructionIt.hasNext()) {
+          SSAInstruction instruction = instructionIt.next();
+          if (instruction instanceof SSAInvokeInstruction) {
+            String signature = ((SSAInvokeInstruction) instruction).getDeclaredTarget().getSignature();
+            if(signature.equals("kkkjjjmmm.slicer.Util.Observe(Z)V")) { // TODO use the proper signature
+              assert instruction.getNumberOfUses() > 0;
+              assert ((SSAInvokeInstruction) instruction).getNumberOfParameters() > 0;
+              int argValue = instruction.getUse(0); // observe parameter
+              SSAInstruction parameterDefinition = df.getDef(argValue);
+              
+              Statement parameterDefStatement = ssaInstruction2Statement(statement.getNode(),parameterDefinition);
+              defObserveVariables.add(parameterDefStatement);
+              
+              //still has problem if slice the modified example, the statement is still com.sun.jdi.InvocationException occurred invoking method.
+              ISSABasicBlock phiBlock = ir.getBasicBlockForInstruction(parameterDefinition);//get which block this phi instruction belongs to
+              int firstIndex = phiBlock.getFirstInstructionIndex();//compute the index of the first instruction in this block
+
+              // see https://github.com/wala/WALA/wiki/Slicer#api for details
+              //Statement parameterDefStatement = new NormalStatement(statement.getNode(),firstIndex);              
+            } else if (signature.equals(calleeMethodSignature)) { // TODO also use the proper signature here
+              assert returnStmt == null; // only want to write it once
+              assert instruction.getNumberOfDefs() > 0;
+              assert ((SSAInvokeInstruction) instruction).getNumberOfParameters() > 0;
+
+              // not the real "return" from the method, just our slicing criteria
+              returnStmt = ssaInstruction2Statement(statement.getNode(),instruction);
+              //returnStmt = new NormalStatement(statement.getNode(),instruction.iindex);
+            }
+          }
+        }
+        
+        assert returnStmt != null;
+        // compute INF(O,G), populate pdg
+        for (Statement defObserveVar : defObserveVariables) {
+      	    PDG pdg = sdg.getPDG(statement.getNode());
+      	    System.out.println(pdg.toString());
+//      	    pdg.addEdge(defObserveVar, returnStmt);//something wrong
+        }
+      }
+      
+//      System.out.println(sdg);
+      
+     
+      SDGSupergraph forwards = new SDGSupergraph(sdg, backward);
+      if (backward)
+        this.supergraph = BackwardsSupergraph.make(forwards);
+      else
+        this.supergraph = forwards;
+      this.f = new SliceFunctions();
+    }
+    
+    /*
+     * transform a SSAInstruction to statement
+     * */
+    public static synchronized Statement ssaInstruction2Statement(CGNode node, SSAInstruction s) {
+    	    if (node == null) {
+    	      throw new IllegalArgumentException("null node");
+    	    }
+    	    if (s == null) {
+    	      throw new IllegalArgumentException("null s");
+    	    }
+    	    if (s instanceof SSAPhiInstruction) {
+    	      SSAPhiInstruction phi = (SSAPhiInstruction) s;
+    	      return new PhiStatement(node, phi);
+    	    } else if (s instanceof SSAPiInstruction) {
+    	      SSAPiInstruction pi = (SSAPiInstruction) s;
+    	      return new PiStatement(node, pi);
+    	    } else if (s instanceof SSAGetCaughtExceptionInstruction) {
+    	      return new GetCaughtExceptionStatement(node, ((SSAGetCaughtExceptionInstruction) s));
+    	    } else {
+    	      int instructionIndices = s.iindex;
+    	      if ((Integer)instructionIndices == null) {
+    	        Assertions.UNREACHABLE(s.toString() + "\nnot found in map of\n" + node.getIR());
+    	      }
+    	      return new NormalStatement(node, instructionIndices);
+    	    }
+    	  }
+    
 
     /*
      * @see com.ibm.wala.dataflow.IFDS.TabulationProblem#getDomain()
