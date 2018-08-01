@@ -10,6 +10,8 @@
  *******************************************************************************/
 package com.ibm.wala.ipa.slicer;
 
+import java.io.FileNotFoundException;
+import java.io.PrintStream;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashSet;
@@ -24,8 +26,10 @@ import com.google.common.collect.HashMultimap;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Multimap;
 import com.google.common.collect.Multimaps;
+import com.google.common.graph.EndpointPair;
 import com.google.common.graph.GraphBuilder;
 import com.google.common.graph.MutableGraph;
+import com.ibm.wala.classLoader.IMethod;
 import com.ibm.wala.dataflow.IFDS.BackwardsSupergraph;
 import com.ibm.wala.dataflow.IFDS.IMergeFunction;
 import com.ibm.wala.dataflow.IFDS.IPartiallyBalancedFlowFunctions;
@@ -264,6 +268,10 @@ public class Slicer {
     //while(iterator.hasNext()) {
     for(int nodeId = 0; nodeId<=maxNodeId; nodeId++) {
     	Statement node = (Statement) sdg.getNode(nodeId);//iterator.next();
+    	IMethod nodeMethod = node.getNode().getMethod();
+    	if (nodeMethod.isSynthetic() || nodeMethod.isNative() || nodeMethod.getSignature().contains("java.")) {
+    		continue;
+    	}
     	IntSet successors = sdg.getPredNodeNumbers(node);
     	IntIterator successorIndices = successors.intIterator();
     	while(successorIndices.hasNext()) {		
@@ -295,6 +303,21 @@ public class Slicer {
     } 
     
     newEdges.entries().stream().forEach(e -> graph.putEdge(e.getKey(), e.getValue()));
+    
+	PrintStream out;
+	try {
+		out = new PrintStream("/home/jiaming/WALA/WALA-START/tempeture.txt");
+
+		System.setOut(out);
+		//System.out.println(sdg);
+		Set<EndpointPair<Statement>> ed = graph.edges();
+		Iterator<EndpointPair<Statement>> edit = ed.iterator();
+		while (edit.hasNext()) {
+			System.out.println(edit.next());
+		}
+	} catch (FileNotFoundException e) {
+		e.printStackTrace();
+	}
     
     //System.out.println("GRAPH: "+graph);
     return new Slicer().slice(sdg, ss, backward);
@@ -440,7 +463,7 @@ public class Slicer {
         // compute INF(O,G), populate pdg
         for (Statement defObserveVar : defObserveVariables) {
       	    PDG pdg = sdg.getPDG(statement.getNode());
-      	    System.out.println(pdg.toString());
+      	    //System.out.println(pdg.toString());
 //      	    pdg.addEdge(defObserveVar, returnStmt);//something wrong
         }
       }

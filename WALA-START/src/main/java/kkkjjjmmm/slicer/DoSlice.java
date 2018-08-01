@@ -121,6 +121,8 @@ public class DoSlice {
 				int lastSlash = fullClassName.lastIndexOf('/');
 				String packageName = fullClassName.substring(1, lastSlash);
 				String className = fullClassName.substring(lastSlash + 1);
+				System.out.println(packageName);
+				System.out.println(className);
 				CompilationUnit cu = null;
 				
 				Set<Integer> sliceStatements = new TreeSet<>();
