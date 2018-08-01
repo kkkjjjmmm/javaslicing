@@ -26,8 +26,10 @@ public class Example {
 		
 		//g = d||g;
 		//g = Yeah.negate(g);
-		Util.Observe(g == false);
-		
+		boolean q4 = g==false;
+		Util.Observe(q4);
+		g=false;
+
 		//d = true;
 		if(!i) {
 			s = Util.Bernoulli(0.2);
@@ -35,6 +37,7 @@ public class Example {
 		}else {
 			s = Util.Bernoulli(0.95);
 		}
+
 		if(!g) {
 			l = Util.Bernoulli(0.1);
 			

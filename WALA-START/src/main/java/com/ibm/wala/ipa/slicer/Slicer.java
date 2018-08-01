@@ -10,24 +10,14 @@
  *******************************************************************************/
 package com.ibm.wala.ipa.slicer;
 
-import java.io.FileNotFoundException;
-import java.io.PrintStream;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.HashSet;
-import java.util.Iterator;
-import java.util.Map;
-import java.util.Set;
-import java.util.stream.Collector;
-import java.util.stream.Collectors;
-
-import com.google.common.collect.HashBasedTable;
 import com.google.common.collect.HashMultimap;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Multimap;
-import com.google.common.collect.Multimaps;
+import com.google.common.collect.Sets;
 import com.google.common.graph.EndpointPair;
+import com.google.common.graph.Graph;
 import com.google.common.graph.GraphBuilder;
+import com.google.common.graph.Graphs;
 import com.google.common.graph.MutableGraph;
 import com.ibm.wala.classLoader.IMethod;
 import com.ibm.wala.dataflow.IFDS.BackwardsSupergraph;
@@ -45,28 +35,40 @@ import com.ibm.wala.ipa.callgraph.CallGraph;
 import com.ibm.wala.ipa.callgraph.propagation.InstanceKey;
 import com.ibm.wala.ipa.callgraph.propagation.PointerAnalysis;
 import com.ibm.wala.ipa.modref.ModRef;
-import com.ibm.wala.ssa.DefUse;
+import com.ibm.wala.ipa.slicer.Statement.Kind;
 import com.ibm.wala.ssa.IR;
-import com.ibm.wala.ssa.ISSABasicBlock;
 import com.ibm.wala.ssa.SSAGetCaughtExceptionInstruction;
 import com.ibm.wala.ssa.SSAInstruction;
-import com.ibm.wala.ssa.SSAInvokeInstruction;
 import com.ibm.wala.ssa.SSAPhiInstruction;
 import com.ibm.wala.ssa.SSAPiInstruction;
 import com.ibm.wala.util.CancelException;
 import com.ibm.wala.util.MonitorUtil.IProgressMonitor;
+import com.ibm.wala.util.WalaException;
 import com.ibm.wala.util.collections.HashSetFactory;
-import com.ibm.wala.util.collections.MultiMap;
 import com.ibm.wala.util.debug.Assertions;
 import com.ibm.wala.util.intset.IntIterator;
 import com.ibm.wala.util.intset.IntSet;
+import com.ibm.wala.viz.DotUtil;
+import java.io.FileNotFoundException;
+import java.io.PrintStream;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * A demand-driven context-sensitive slicer.
  *
- * This computes a context-sensitive slice, building an SDG and finding realizable paths to a statement using tabulation.
+ * This computes a context-sensitive slice, building an SDG and finding realizable paths to a
+ * statement using tabulation.
  *
- * This implementation uses a preliminary pointer analysis to compute data dependence between heap locations in the SDG.
+ * This implementation uses a preliminary pointer analysis to compute data dependence between heap
+ * locations in the SDG.
  */
 public class Slicer {
 
@@ -75,19 +77,239 @@ public class Slicer {
   public final static boolean VERBOSE = false;
 
   /**
+   * @param s a statement of interest
+   * @return the backward slice of s.
+   */
+  public static <U extends InstanceKey> Collection<Statement> computeBackwardSlice(Statement s,
+      CallGraph cg, PointerAnalysis<U> pa,
+      DataDependenceOptions dOptions, ControlDependenceOptions cOptions)
+      throws IllegalArgumentException, CancelException {
+    return computeSlice(new SDG<U>(cg, pa, ModRef.<U>make(), dOptions, cOptions),
+        Collections.singleton(s), true);
+  }
+
+  /**
+   * @param s a statement of interest
+   * @return the forward slice of s.
+   */
+  public static <U extends InstanceKey> Collection<Statement> computeForwardSlice(Statement s,
+      CallGraph cg,
+      PointerAnalysis<U> pa,
+      DataDependenceOptions dOptions, ControlDependenceOptions cOptions)
+      throws IllegalArgumentException, CancelException {
+    return computeSlice(new SDG<U>(cg, pa, ModRef.<U>make(), dOptions, cOptions),
+        Collections.singleton(s), false);
+  }
+
+  /**
+   * Use the passed-in SDG
+   */
+  public static Collection<Statement> computeBackwardSlice(SDG sdg, Statement s)
+      throws IllegalArgumentException, CancelException {
+    return computeSlice(sdg, Collections.singleton(s), true);
+  }
+
+  /**
+   * Use the passed-in SDG
+   */
+  public static Collection<Statement> computeForwardSlice(SDG sdg, Statement s)
+      throws IllegalArgumentException, CancelException {
+    return computeSlice(sdg, Collections.singleton(s), false);
+  }
+
+  /**
+   * Use the passed-in SDG
+   */
+  public static Collection<Statement> computeBackwardSlice(SDG sdg, Collection<Statement> ss)
+      throws IllegalArgumentException,
+      CancelException {
+    return computeSlice(sdg, ss, true);
+  }
+
+
+  protected static Collection<Statement> computeSlice(SDG sdg, Collection<Statement> ss,
+      boolean backward) throws CancelException {
+    if (sdg == null) {
+      throw new IllegalArgumentException("sdg cannot be null");
+    }
+
+    MutableGraph<Statement> graph = GraphBuilder.directed().build();
+
+    final int maxNodeId = sdg.getMaxNumber();
+    for (int nodeId = 0; nodeId <= maxNodeId; nodeId++) {
+      Statement node = (Statement) sdg.getNode(nodeId);//iterator.next();
+//      IMethod nodeMethod = node.getNode().getMethod();
+//      if (nodeMethod.isSynthetic() || nodeMethod.isNative() || node.toString()
+//          .contains("Primordial, Ljava/lang")) {
+//        continue;
+//      }
+      IntSet successors = sdg.getPredNodeNumbers(node);
+      IntIterator successorIndices = successors.intIterator();
+      while (successorIndices.hasNext()) {
+        int successorId = successorIndices.next();
+        Statement destinationNode = (Statement) sdg.getNode(successorId);
+        if (!node.equals(destinationNode)) {
+          graph.putEdge(node, destinationNode);
+        }
+      }
+    }
+
+    System.out.println("--- edges on the graph (from sdg) ---");
+    for (Statement stmt : graph.nodes()) {
+      System.out.println(stmt);
+      for (Statement succ : graph.successors(stmt)) {
+        System.out.println("  >> " + succ);
+      }
+    }
+    System.out.println("-------------------------------------");
+
+    //TODO Quick and dirty filtering of observe nodes based on string representaion
+    Set<Statement> sliceTargets = graph.nodes().stream()
+        .filter(
+            n -> n.getKind().equals(Kind.NORMAL) && n.toString()
+                .contains("invokestatic") && n.toString().contains("fake("))
+        .collect(Collectors.toSet());
+
+    Set<Statement> sliceTargetVariables = Sets.newHashSet();
+    sliceTargets.stream().map(n -> graph.successors(n)).forEach(sliceTargetVariables::addAll);
+    sliceTargetVariables = sliceTargetVariables.stream()
+        .filter(v -> !v.getKind().equals(Kind.METHOD_ENTRY)).collect(
+            Collectors.toSet());
+
+    Set<Statement> observeNodes = graph.nodes().stream()
+        .filter(
+            n -> n.getKind().equals(Kind.NORMAL) && n.toString()
+                .contains("Observe")).collect(Collectors.toSet());
+
+    Set<Statement> observeVariablesHelper = Sets.newHashSet();
+    observeNodes.stream().map(n -> graph.successors(n)).forEach(observeVariablesHelper::addAll);
+    final Set<Statement> observeVariables = observeVariablesHelper.stream()
+        .filter(v -> !v.getKind().equals(Kind.METHOD_ENTRY)).collect(
+            Collectors.toSet());
+
+    sliceTargetVariables.forEach(v -> {
+
+      observeVariables.stream().filter(o -> o.getNode().equals(v.getNode())).collect(Collectors.toSet()).forEach(o -> {
+        Set<Statement> reachableFromObserve = Graphs.reachableNodes(graph, o);
+        Set<Statement> reachableFromTargetVariable = Graphs.reachableNodes(graph, v);
+
+        if (!Sets.intersection(reachableFromObserve, reachableFromTargetVariable).isEmpty()) {
+          //sdg.getPDG(v.getNode()).addEdge(o, v);
+          System.out.println("ADDING EDGE \n \t from: " + v + "\n\tto:   " + o + "\n\n");
+        }
+      });
+    });
+
+    try {
+      DotUtil.writeDotFile(sdg, null, "slice", "slice.dot");
+    } catch (WalaException e) {
+      e.printStackTrace();
+    }
+
+    PrintStream out;
+    try {
+      out = new PrintStream("graphDump.txt");
+
+      System.setOut(out);
+      //System.out.println(sdg);
+      Set<EndpointPair<Statement>> ed = graph.edges();
+      Iterator<EndpointPair<Statement>> edit = ed.iterator();
+      while (edit.hasNext()) {
+        System.out.println(edit.next());
+      }
+    } catch (FileNotFoundException e) {
+      e.printStackTrace();
+    }
+
+    //System.out.println("GRAPH: "+graph);
+    return new Slicer().slice(sdg, ss, backward);
+  }
+
+
+
+  /**
+   * @param s a statement of interest
+   * @return the backward slice of s.
+   */
+  public static Collection<Statement> computeBackwardSlice(Statement s, CallGraph cg,
+      PointerAnalysis<InstanceKey> pointerAnalysis)
+      throws IllegalArgumentException, CancelException {
+    return computeBackwardSlice(s, cg, pointerAnalysis, DataDependenceOptions.FULL,
+        ControlDependenceOptions.FULL);
+  }
+
+  /**
+   * Main driver logic.
+   *
+   * @param sdg governing system dependence graph
+   * @param roots set of roots to slice from
+   * @param backward do a backwards slice?
+   * @return the {@link Statement}s found by the slicer
+   */
+  public Collection<Statement> slice(SDG sdg, Collection<Statement> roots, boolean backward)
+      throws CancelException {
+    return slice(sdg, roots, backward, null);
+  }
+
+  /**
+   * Main driver logic.
+   *
+   * @param sdg governing system dependence graph
+   * @param roots set of roots to slice from
+   * @param backward do a backwards slice?
+   * @param monitor to cancel analysis if needed
+   * @return the {@link Statement}s found by the slicer
+   */
+  public Collection<Statement> slice(SDG sdg, Collection<Statement> roots, boolean backward,
+      IProgressMonitor monitor)
+      throws CancelException {
+    if (sdg == null) {
+      throw new IllegalArgumentException("sdg cannot be null");
+    }
+
+    SliceProblem p = makeSliceProblem(roots, sdg, backward);
+
+    PartiallyBalancedTabulationSolver<Statement, PDG<?>, Object> solver = PartiallyBalancedTabulationSolver
+        .createPartiallyBalancedTabulationSolver(p, monitor);
+    TabulationResult<Statement, PDG<?>, Object> tr = solver.solve();
+
+    Collection<Statement> slice = tr.getSupergraphNodesReached();
+
+    if (VERBOSE) {
+      System.err.println("Slicer done.");
+    }
+
+    return slice;
+  }
+
+  /**
+   * Return an object which encapsulates the tabulation logic for the slice problem. Subclasses can
+   * override this method to implement special semantics.
+   */
+  protected SliceProblem makeSliceProblem(Collection<Statement> roots, ISDG sdgView,
+      boolean backward) {
+    return new SliceProblem(roots, sdgView, backward);
+  }
+
+  /**
    * options to control data dependence edges in the SDG
    */
   public static enum DataDependenceOptions {
-    FULL("full", false, false, false, false), NO_BASE_PTRS("no_base_ptrs", true, false, false, false), NO_BASE_NO_HEAP(
-        "no_base_no_heap", true, true, false, false), NO_BASE_NO_EXCEPTIONS("no_base_no_exceptions", true, false, false, true), NO_BASE_NO_HEAP_NO_EXCEPTIONS(
-        "no_base_no_heap_no_exceptions", true, true, false, true), NO_HEAP("no_heap", false, true, false, false), NO_HEAP_NO_EXCEPTIONS(
-        "no_heap_no_exceptions", false, true, false, true), NO_EXCEPTIONS("no_exceptions", false, false, false, true), NONE("none",
+    FULL("full", false, false, false, false), NO_BASE_PTRS("no_base_ptrs", true, false, false,
+        false), NO_BASE_NO_HEAP(
+        "no_base_no_heap", true, true, false, false), NO_BASE_NO_EXCEPTIONS("no_base_no_exceptions",
+        true, false, false, true), NO_BASE_NO_HEAP_NO_EXCEPTIONS(
+        "no_base_no_heap_no_exceptions", true, true, false, true), NO_HEAP("no_heap", false, true,
+        false, false), NO_HEAP_NO_EXCEPTIONS(
+        "no_heap_no_exceptions", false, true, false, true), NO_EXCEPTIONS("no_exceptions", false,
+        false, false, true), NONE("none",
         true, true, true, true), REFLECTION("no_base_no_heap_no_cast", true, true, true, true);
 
     private final String name;
 
     /**
-     * Ignore data dependence edges representing base pointers? e.g for a statement y = x.f, ignore the data dependence edges for x
+     * Ignore data dependence edges representing base pointers? e.g for a statement y = x.f, ignore
+     * the data dependence edges for x
      */
     private final boolean ignoreBasePtrs;
 
@@ -97,7 +319,8 @@ public class Slicer {
     private final boolean ignoreHeap;
 
     /**
-     * Ignore outgoing data dependence edges from a cast statements? [This is a special case option used for reflection processing]
+     * Ignore outgoing data dependence edges from a cast statements? [This is a special case option
+     * used for reflection processing]
      */
     private final boolean terminateAtCast;
 
@@ -106,7 +329,8 @@ public class Slicer {
      */
     private final boolean ignoreExceptions;
 
-    DataDependenceOptions(String name, boolean ignoreBasePtrs, boolean ignoreHeap, boolean terminateAtCast, boolean ignoreExceptions) {
+    DataDependenceOptions(String name, boolean ignoreBasePtrs, boolean ignoreHeap,
+        boolean terminateAtCast, boolean ignoreExceptions) {
       this.name = name;
       this.ignoreBasePtrs = ignoreBasePtrs;
       this.ignoreHeap = ignoreHeap;
@@ -127,8 +351,8 @@ public class Slicer {
     }
 
     /**
-     * Should data dependence chains terminate at casts? This is used for reflection processing ... we only track flow into casts
-     * ... but not out.
+     * Should data dependence chains terminate at casts? This is used for reflection processing ...
+     * we only track flow into casts ... but not out.
      */
     public final boolean isTerminateAtCast() {
       return terminateAtCast;
@@ -182,7 +406,8 @@ public class Slicer {
     private final boolean ignoreInterprocEdges;
 
 
-    ControlDependenceOptions(String name, boolean ignoreExceptionalEdges, boolean ignoreInterprocEdges) {
+    ControlDependenceOptions(String name, boolean ignoreExceptionalEdges,
+        boolean ignoreInterprocEdges) {
       this.name = name;
       this.ignoreExceptionalEdges = ignoreExceptionalEdges;
       this.ignoreInterprocEdges = ignoreInterprocEdges;
@@ -203,309 +428,60 @@ public class Slicer {
   }
 
   /**
-   * @param s a statement of interest
-   * @return the backward slice of s.
-   * @throws CancelException
-   */
-  public static <U extends InstanceKey> Collection<Statement> computeBackwardSlice(Statement s, CallGraph cg, PointerAnalysis<U> pa,
-      DataDependenceOptions dOptions, ControlDependenceOptions cOptions) throws IllegalArgumentException, CancelException {
-    return computeSlice(new SDG<U>(cg, pa, ModRef.<U>make(), dOptions, cOptions), Collections.singleton(s), true);
-  }
-
-  /**
-   * @param s a statement of interest
-   * @return the forward slice of s.
-   * @throws CancelException
-   */
-  public static <U extends InstanceKey> Collection<Statement> computeForwardSlice(Statement s, CallGraph cg,
-      PointerAnalysis<U> pa,
-      DataDependenceOptions dOptions, ControlDependenceOptions cOptions) throws IllegalArgumentException, CancelException {
-    return computeSlice(new SDG<U>(cg, pa, ModRef.<U>make(), dOptions, cOptions), Collections.singleton(s), false);
-  }
-
-  /**
-   * Use the passed-in SDG
-   *
-   * @throws CancelException
-   */
-  public static Collection<Statement> computeBackwardSlice(SDG sdg, Statement s) throws IllegalArgumentException, CancelException {
-    return computeSlice(sdg, Collections.singleton(s), true);
-  }
-
-  /**
-   * Use the passed-in SDG
-   *
-   * @throws CancelException
-   */
-  public static Collection<Statement> computeForwardSlice(SDG sdg, Statement s) throws IllegalArgumentException, CancelException {
-    return computeSlice(sdg, Collections.singleton(s), false);
-  }
-
-  /**
-   * Use the passed-in SDG
-   *
-   * @throws CancelException
-   */
-  public static Collection<Statement> computeBackwardSlice(SDG sdg, Collection<Statement> ss) throws IllegalArgumentException,
-      CancelException {
-    return computeSlice(sdg, ss, true);
-  }
-
-  /**
-   * @param ss a collection of statements of interest
-   * @throws CancelException
-   */
-  protected static Collection<Statement> computeSlice(SDG sdg, Collection<Statement> ss, boolean backward) throws CancelException {
-    if (sdg == null) {
-      throw new IllegalArgumentException("sdg cannot be null");
-    }
-    
-    Map<Statement, Integer> nodeIndices = Maps.newHashMap();
-    MutableGraph<Statement> graph = GraphBuilder.directed().build();
-    
-    //Iterator<Statement> iterator = sdg.getNodeManager().iterator();
-    final int maxNodeId = sdg.getMaxNumber();
-    //while(iterator.hasNext()) {
-    for(int nodeId = 0; nodeId<=maxNodeId; nodeId++) {
-    	Statement node = (Statement) sdg.getNode(nodeId);//iterator.next();
-    	IMethod nodeMethod = node.getNode().getMethod();
-    	if (nodeMethod.isSynthetic() || nodeMethod.isNative() || nodeMethod.getSignature().contains("java.")) {
-    		continue;
-    	}
-    	IntSet successors = sdg.getPredNodeNumbers(node);
-    	IntIterator successorIndices = successors.intIterator();
-    	while(successorIndices.hasNext()) {		
-    		int successorId = successorIndices.next();
-    		Statement destinationNode = (Statement) sdg.getNode(successorId);
-    		if(!node.equals(destinationNode)) {
-    			nodeIndices.put(node, nodeId);
-    			nodeIndices.put(destinationNode, successorId);
-    			graph.putEdge(node, destinationNode);
-    		}
-    	}
-    }
-    //TODO Quick and dirty filtering of observe nodes based on string representaion
-    Set<Statement> observeNodes = graph.nodes().stream().filter(n -> n.toString().contains("Observe(Z)")).collect(Collectors.toSet());
-    
-    Multimap<Statement, Statement> newEdges = HashMultimap.create();
-    
-    for(Statement observeNode : observeNodes) {
-    	final int observeNodeId = nodeIndices.get(observeNode);
-    	Set<Statement> predecessors = graph.predecessors(observeNode);
-    	for(Statement predecessor : predecessors) {
-    		Set<Statement> successors = graph.successors(predecessor);
-    		successors = successors.stream().filter(n -> nodeIndices.get(n)>observeNodeId).collect(Collectors.toSet());
-    		for(Statement successor : successors) {
-    			//Adding dependence between observe node and the successors of observeNode's predecessors having index larger than the index of observeNode (i.e., they came later in the execution)
-    			newEdges.put(observeNode, successor);
-    		}
-    	}
-    } 
-    
-    newEdges.entries().stream().forEach(e -> graph.putEdge(e.getKey(), e.getValue()));
-    
-	PrintStream out;
-	try {
-		out = new PrintStream("/home/jiaming/WALA/WALA-START/tempeture.txt");
-
-		System.setOut(out);
-		//System.out.println(sdg);
-		Set<EndpointPair<Statement>> ed = graph.edges();
-		Iterator<EndpointPair<Statement>> edit = ed.iterator();
-		while (edit.hasNext()) {
-			System.out.println(edit.next());
-		}
-	} catch (FileNotFoundException e) {
-		e.printStackTrace();
-	}
-    
-    //System.out.println("GRAPH: "+graph);
-    return new Slicer().slice(sdg, ss, backward);
-  }
-
-  /**
-   * Main driver logic.
-   *
-   * @param sdg governing system dependence graph
-   * @param roots set of roots to slice from
-   * @param backward do a backwards slice?
-   * @return the {@link Statement}s found by the slicer
-   * @throws CancelException
-   */
-  public Collection<Statement> slice(SDG sdg, Collection<Statement> roots, boolean backward) throws CancelException {
-    return slice(sdg, roots, backward, null);
-  }
-
-  /**
-   * Main driver logic.
-   *
-   * @param sdg governing system dependence graph
-   * @param roots set of roots to slice from
-   * @param backward do a backwards slice?
-   * @param monitor to cancel analysis if needed
-   * @return the {@link Statement}s found by the slicer
-   * @throws CancelException
-   */
-  public Collection<Statement> slice(SDG sdg, Collection<Statement> roots, boolean backward, IProgressMonitor monitor)
-      throws CancelException {
-    if (sdg == null) {
-      throw new IllegalArgumentException("sdg cannot be null");
-    }
-
-    SliceProblem p = makeSliceProblem(roots, sdg, backward);
-
-    PartiallyBalancedTabulationSolver<Statement, PDG<?>, Object> solver = PartiallyBalancedTabulationSolver
-        .createPartiallyBalancedTabulationSolver(p, monitor);
-    TabulationResult<Statement, PDG<?>, Object> tr = solver.solve();
-
-    Collection<Statement> slice = tr.getSupergraphNodesReached();
-
-    if (VERBOSE) {
-      System.err.println("Slicer done.");
-    }
-
-    return slice;
-  }
-
-  /**
-   * Return an object which encapsulates the tabulation logic for the slice problem. Subclasses can override this method to
-   * implement special semantics.
-   */
-  protected SliceProblem makeSliceProblem(Collection<Statement> roots, ISDG sdgView, boolean backward) {
-    return new SliceProblem(roots, sdgView, backward);
-  }
-
-  /**
-   * @param s a statement of interest
-   * @return the backward slice of s.
-   * @throws CancelException
-   */
-  public static Collection<Statement> computeBackwardSlice(Statement s, CallGraph cg, PointerAnalysis<InstanceKey> pointerAnalysis)
-      throws IllegalArgumentException, CancelException {
-    return computeBackwardSlice(s, cg, pointerAnalysis, DataDependenceOptions.FULL, ControlDependenceOptions.FULL);
-  }
-
-  /**
    * Tabulation problem representing slicing
-   *
    */
-  public static class SliceProblem implements PartiallyBalancedTabulationProblem<Statement, PDG<?>, Object> {
+  public static class SliceProblem implements
+      PartiallyBalancedTabulationProblem<Statement, PDG<?>, Object> {
 
     private final Collection<Statement> roots;
 
-    private final ISupergraph<Statement,PDG<? extends InstanceKey>> supergraph;
+    private final ISupergraph<Statement, PDG<? extends InstanceKey>> supergraph;
 
     private final SliceFunctions f;
 
     private final boolean backward;
 
+    // TODO store observe variables in a set here
+    private final Set<String> observevariable = new HashSet<String>();
+    private final Set<String> returnvariable = new HashSet<String>();
+
     public SliceProblem(Collection<Statement> roots, ISDG sdg, boolean backward) {
       this.roots = roots;
       this.backward = backward;
-
-      // TODO add dependencies to PDG
-      // TODO handle programs with multiple functions
-      Statement returnStmt = null;
-      Set<Statement> defObserveVariables = new HashSet<>();
-      
-      // see section 4.1 (influencers) for more details
-      Iterator<Statement> rootIt = roots.iterator();
-      while (rootIt.hasNext()) {
-
-        Statement statement = rootIt.next();
-        IR ir = statement.getNode().getIR();
-        DefUse df = new DefUse(ir);
-        Iterator<SSAInstruction> instructionIt = ir.iterateAllInstructions();
-        
-        //compute the callee method signature
-        int beginIndex = statement.toString().indexOf("<"); 
-        int endIndex =  statement.toString().indexOf(">") + 1;
-        String calleeMethodSignature = statement.toString().substring(beginIndex, endIndex);
-        beginIndex = calleeMethodSignature.indexOf("L")+1;
-        endIndex = calleeMethodSignature.lastIndexOf(" ");
-        calleeMethodSignature = calleeMethodSignature.substring(beginIndex, endIndex);
-        calleeMethodSignature = calleeMethodSignature.replace("/", ".");
-        calleeMethodSignature = calleeMethodSignature.replace(", ", ".");
-        
-        // compute return/observe variables
-        while (instructionIt.hasNext()) {
-          SSAInstruction instruction = instructionIt.next();
-          if (instruction instanceof SSAInvokeInstruction) {
-            String signature = ((SSAInvokeInstruction) instruction).getDeclaredTarget().getSignature();
-            if(signature.equals("kkkjjjmmm.slicer.Util.Observe(Z)V")) { // TODO use the proper signature
-              assert instruction.getNumberOfUses() > 0;
-              assert ((SSAInvokeInstruction) instruction).getNumberOfParameters() > 0;
-              int argValue = instruction.getUse(0); // observe parameter
-              SSAInstruction parameterDefinition = df.getDef(argValue);
-              
-              Statement parameterDefStatement = ssaInstruction2Statement(statement.getNode(),parameterDefinition);
-              defObserveVariables.add(parameterDefStatement);
-              
-              //still has problem if slice the modified example, the statement is still com.sun.jdi.InvocationException occurred invoking method.
-              ISSABasicBlock phiBlock = ir.getBasicBlockForInstruction(parameterDefinition);//get which block this phi instruction belongs to
-              int firstIndex = phiBlock.getFirstInstructionIndex();//compute the index of the first instruction in this block
-
-              // see https://github.com/wala/WALA/wiki/Slicer#api for details
-              //Statement parameterDefStatement = new NormalStatement(statement.getNode(),firstIndex);              
-            } else if (signature.equals(calleeMethodSignature)) { // TODO also use the proper signature here
-              assert returnStmt == null; // only want to write it once
-              assert instruction.getNumberOfDefs() > 0;
-              assert ((SSAInvokeInstruction) instruction).getNumberOfParameters() > 0;
-
-              // not the real "return" from the method, just our slicing criteria
-              returnStmt = ssaInstruction2Statement(statement.getNode(),instruction);
-              //returnStmt = new NormalStatement(statement.getNode(),instruction.iindex);
-            }
-          }
-        }
-        
-        assert returnStmt != null;
-        // compute INF(O,G), populate pdg
-        for (Statement defObserveVar : defObserveVariables) {
-      	    PDG pdg = sdg.getPDG(statement.getNode());
-      	    //System.out.println(pdg.toString());
-//      	    pdg.addEdge(defObserveVar, returnStmt);//something wrong
-        }
-      }
-      
-//      System.out.println(sdg);
-      
-     
       SDGSupergraph forwards = new SDGSupergraph(sdg, backward);
-      if (backward)
+
+      // TODO add INF(O,G) to forwards
+      if (backward) {
         this.supergraph = BackwardsSupergraph.make(forwards);
-      else
+      } else {
         this.supergraph = forwards;
-      this.f = new SliceFunctions();
+      }
+      f = new SliceFunctions();
     }
-    
-    /*
-     * transform a SSAInstruction to statement
-     * */
-    public static synchronized Statement ssaInstruction2Statement(CGNode node, SSAInstruction s) {
-    	    if (node == null) {
-    	      throw new IllegalArgumentException("null node");
-    	    }
-    	    if (s == null) {
-    	      throw new IllegalArgumentException("null s");
-    	    }
-    	    if (s instanceof SSAPhiInstruction) {
-    	      SSAPhiInstruction phi = (SSAPhiInstruction) s;
-    	      return new PhiStatement(node, phi);
-    	    } else if (s instanceof SSAPiInstruction) {
-    	      SSAPiInstruction pi = (SSAPiInstruction) s;
-    	      return new PiStatement(node, pi);
-    	    } else if (s instanceof SSAGetCaughtExceptionInstruction) {
-    	      return new GetCaughtExceptionStatement(node, ((SSAGetCaughtExceptionInstruction) s));
-    	    } else {
-    	      int instructionIndices = s.iindex;
-    	      if ((Integer)instructionIndices == null) {
-    	        Assertions.UNREACHABLE(s.toString() + "\nnot found in map of\n" + node.getIR());
-    	      }
-    	      return new NormalStatement(node, instructionIndices);
-    	    }
-    	  }
-    
+
+    public static synchronized Statement ssaInstruction2Statement(CGNode node, SSAInstruction s,
+        Integer instructionIndices, IR ir) {
+      if (node == null) {
+        throw new IllegalArgumentException("null node");
+      }
+      if (s == null) {
+        throw new IllegalArgumentException("null s");
+      }
+      if (s instanceof SSAPhiInstruction) {
+        SSAPhiInstruction phi = (SSAPhiInstruction) s;
+        return new PhiStatement(node, phi);
+      } else if (s instanceof SSAPiInstruction) {
+        SSAPiInstruction pi = (SSAPiInstruction) s;
+        return new PiStatement(node, pi);
+      } else if (s instanceof SSAGetCaughtExceptionInstruction) {
+        return new GetCaughtExceptionStatement(node, ((SSAGetCaughtExceptionInstruction) s));
+      } else {
+        if (instructionIndices == null) {
+          Assertions.UNREACHABLE(s.toString() + "\nnot found in map of\n" + ir);
+        }
+        return new NormalStatement(node, instructionIndices.intValue());
+      }
+    }
 
     /*
      * @see com.ibm.wala.dataflow.IFDS.TabulationProblem#getDomain()
@@ -545,14 +521,16 @@ public class Slicer {
       if (backward) {
         Collection<PathEdge<Statement>> result = HashSetFactory.make();
         for (Statement st : roots) {
-          PathEdge<Statement> seed = PathEdge.createPathEdge(new MethodExitStatement(st.getNode()), 0, st, 0);
+          PathEdge<Statement> seed = PathEdge
+              .createPathEdge(new MethodExitStatement(st.getNode()), 0, st, 0);
           result.add(seed);
         }
         return result;
       } else {
         Collection<PathEdge<Statement>> result = HashSetFactory.make();
         for (Statement st : roots) {
-          PathEdge<Statement> seed = PathEdge.createPathEdge(new MethodEntryStatement(st.getNode()), 0, st, 0);
+          PathEdge<Statement> seed = PathEdge
+              .createPathEdge(new MethodEntryStatement(st.getNode()), 0, st, 0);
           result.add(seed);
         }
         return result;
@@ -561,7 +539,8 @@ public class Slicer {
 
     @Override
     public Statement getFakeEntry(Statement node) {
-      return backward ? new MethodExitStatement(node.getNode()) : new MethodEntryStatement(node.getNode());
+      return backward ? new MethodExitStatement(node.getNode())
+          : new MethodEntryStatement(node.getNode());
     }
 
   }

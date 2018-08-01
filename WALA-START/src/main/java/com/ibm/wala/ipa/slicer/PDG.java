@@ -1208,7 +1208,7 @@ public class PDG<T extends InstanceKey> implements NumberedGraph<Statement> {
 
   @Override
   public void addEdge(Statement src, Statement dst) {
-	  delegate.addEdge(src, dst);
+    delegate.addEdge(src, dst);
     //Assertions.UNREACHABLE();
   }
 

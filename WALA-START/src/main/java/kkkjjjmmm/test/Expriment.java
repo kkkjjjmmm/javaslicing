@@ -14,9 +14,14 @@ public class Expriment {
 		}
 		
 		int z = 2 * x;
-		Util.Observe(z>11);
-		int y = x;
-		
+		boolean w = z>11;
+		Util.Observe(w);
+		w = true;
+		int y = w?3:4;
+
+		int w1 = 5*y + x;
+
+		System.out.println(w1);
 		fake(y);
 	}
 	
