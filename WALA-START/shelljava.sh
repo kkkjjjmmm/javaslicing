@@ -8,9 +8,9 @@ FILENAME="$(basename $1)"
 LIBS="src/main/java/kkkjjjmmm/slicer/Util.java"
 DESTINATION="src/main/java/kkkjjjmmm/modified/${FILENAME}"
 
-MAINCLASS=$2 # "Lkkkjjjmmm/test/Example"
-SRCCALLER=$3 # "SliceL"
-SRCCALLEE=$4 # "fake"
+#MAINCLASS=$2 # "Lkkkjjjmmm/test/Example"
+#SRCCALLER=$3 # "SliceL"
+#SRCCALLEE=$4 # "fake"
 
 rm -r $OUTPUT_FOLDER
 mkdir $OUTPUT_FOLDER
