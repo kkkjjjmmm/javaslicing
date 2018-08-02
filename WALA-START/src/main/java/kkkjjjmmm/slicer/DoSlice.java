@@ -50,7 +50,7 @@ import java.util.stream.Collectors;
 
 public class DoSlice {
 
-	private static final DataDependenceOptions D_OPTIONS = DataDependenceOptions.FULL;
+	private static final DataDependenceOptions D_OPTIONS = DataDependenceOptions.NO_EXCEPTIONS;
 	private static final ControlDependenceOptions C_OPTIONS = ControlDependenceOptions.NO_EXCEPTIONAL_EDGES;//ControlDependenceOptions.NO_EXCEPTIONAL_EDGES;
 
 	public static Table<String, String, Set<Integer>> computeSliceStatements(String appJar, String mainClass,
