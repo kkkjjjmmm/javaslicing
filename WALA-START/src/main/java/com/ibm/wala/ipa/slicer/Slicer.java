@@ -10,16 +10,12 @@
  *******************************************************************************/
 package com.ibm.wala.ipa.slicer;
 
-import com.google.common.collect.HashMultimap;
-import com.google.common.collect.Maps;
-import com.google.common.collect.Multimap;
 import com.google.common.collect.Sets;
 import com.google.common.graph.EndpointPair;
 import com.google.common.graph.Graph;
 import com.google.common.graph.GraphBuilder;
 import com.google.common.graph.Graphs;
 import com.google.common.graph.MutableGraph;
-import com.ibm.wala.classLoader.IMethod;
 import com.ibm.wala.dataflow.IFDS.BackwardsSupergraph;
 import com.ibm.wala.dataflow.IFDS.IMergeFunction;
 import com.ibm.wala.dataflow.IFDS.IPartiallyBalancedFlowFunctions;
@@ -46,18 +42,13 @@ import com.ibm.wala.util.MonitorUtil.IProgressMonitor;
 import com.ibm.wala.util.WalaException;
 import com.ibm.wala.util.collections.HashSetFactory;
 import com.ibm.wala.util.debug.Assertions;
-import com.ibm.wala.util.intset.IntIterator;
-import com.ibm.wala.util.intset.IntSet;
 import com.ibm.wala.viz.DotUtil;
 import java.io.FileNotFoundException;
 import java.io.PrintStream;
-import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -133,35 +124,48 @@ public class Slicer {
       throw new IllegalArgumentException("sdg cannot be null");
     }
 
-    MutableGraph<Statement> graph = GraphBuilder.directed().build();
+    MutableGraph<Statement> graph = GraphBuilder.directed().allowsSelfLoops(false).build();
 
-    final int maxNodeId = sdg.getMaxNumber();
-    for (int nodeId = 0; nodeId <= maxNodeId; nodeId++) {
-      Statement node = (Statement) sdg.getNode(nodeId);//iterator.next();
-//      IMethod nodeMethod = node.getNode().getMethod();
-//      if (nodeMethod.isSynthetic() || nodeMethod.isNative() || node.toString()
-//          .contains("Primordial, Ljava/lang")) {
-//        continue;
-//      }
-      IntSet successors = sdg.getPredNodeNumbers(node);
-      IntIterator successorIndices = successors.intIterator();
-      while (successorIndices.hasNext()) {
-        int successorId = successorIndices.next();
-        Statement destinationNode = (Statement) sdg.getNode(successorId);
-        if (!node.equals(destinationNode)) {
-          graph.putEdge(node, destinationNode);
+    Iterator<Statement> sdgNodesIterator = sdg.getNodeManager().iterator();
+    while (sdgNodesIterator.hasNext()) {
+
+      final Statement node = sdgNodesIterator.next();
+      graph.addNode(node);
+
+      PDG pdg = sdg.getPDG(node.getNode());
+
+      final Iterator<Statement> succNodesIterator = pdg.getSuccNodes(node);
+      while (succNodesIterator.hasNext()) {
+        final Statement destNode = succNodesIterator.next();
+        if (!node.equals(destNode)) {
+          graph.putEdge(node, destNode);
+        }
+      }
+
+      final Iterator<Statement> predNodesIterator = pdg.getPredNodes(node);
+      while (predNodesIterator.hasNext()) {
+        final Statement srcNode = predNodesIterator.next();
+        if (!node.equals(srcNode)) {
+          graph.putEdge(srcNode, node);
         }
       }
     }
 
     System.out.println("--- edges on the graph (from sdg) ---");
+
+    Set<Statement> valueCarriers = graph.nodes().stream()
+        .filter(n -> n instanceof ValueNumberCarrier && n.getKind().equals(Kind.NORMAL)).collect(
+            Collectors.toSet());
+
     for (Statement stmt : graph.nodes()) {
       System.out.println(stmt);
       for (Statement succ : graph.successors(stmt)) {
-        System.out.println("  >> " + succ);
+        System.out.println(succ);
       }
     }
     System.out.println("-------------------------------------");
+
+//    Graph<Statement> transClosure = Graphs.transitiveClosure(graph);
 
     //TODO Quick and dirty filtering of observe nodes based on string representaion
     Set<Statement> sliceTargets = graph.nodes().stream()
@@ -170,32 +174,34 @@ public class Slicer {
                 .contains("invokestatic") && n.toString().contains("fake("))
         .collect(Collectors.toSet());
 
-    Set<Statement> sliceTargetVariables = Sets.newHashSet();
-    sliceTargets.stream().map(n -> graph.successors(n)).forEach(sliceTargetVariables::addAll);
-    sliceTargetVariables = sliceTargetVariables.stream()
-        .filter(v -> !v.getKind().equals(Kind.METHOD_ENTRY)).collect(
-            Collectors.toSet());
-
     Set<Statement> observeNodes = graph.nodes().stream()
         .filter(
             n -> n.getKind().equals(Kind.NORMAL) && n.toString()
-                .contains("Observe")).collect(Collectors.toSet());
+                .contains("invokestatic") && n.toString()
+                .contains("Observe(")).collect(Collectors.toSet());
 
-    Set<Statement> observeVariablesHelper = Sets.newHashSet();
-    observeNodes.stream().map(n -> graph.successors(n)).forEach(observeVariablesHelper::addAll);
-    final Set<Statement> observeVariables = observeVariablesHelper.stream()
-        .filter(v -> !v.getKind().equals(Kind.METHOD_ENTRY)).collect(
-            Collectors.toSet());
+    final Graph<Statement> transposedGraph = Graphs.transpose(graph);
 
-    sliceTargetVariables.forEach(v -> {
+    sliceTargets.forEach(v -> {
+      observeNodes.stream().forEach(o -> {
 
-      observeVariables.stream().filter(o -> o.getNode().equals(v.getNode())).collect(Collectors.toSet()).forEach(o -> {
-        Set<Statement> reachableFromObserve = Graphs.reachableNodes(graph, o);
-        Set<Statement> reachableFromTargetVariable = Graphs.reachableNodes(graph, v);
+        Set<Statement> reachableFromObserve = Graphs.reachableNodes(transposedGraph, o);
+        Set<Statement> reachableFromTargetVariable = Graphs.reachableNodes(transposedGraph, v);
 
-        if (!Sets.intersection(reachableFromObserve, reachableFromTargetVariable).isEmpty()) {
-          //sdg.getPDG(v.getNode()).addEdge(o, v);
-          System.out.println("ADDING EDGE \n \t from: " + v + "\n\tto:   " + o + "\n\n");
+        Set<Statement> intersection = Sets
+            .intersection(reachableFromObserve, reachableFromTargetVariable).stream().filter(
+                n -> n.getKind().equals(Kind.NORMAL) || n.getKind().equals(Kind.NORMAL_RET_CALLER)
+                    || n.getKind().equals(Kind.NORMAL_RET_CALLEE)).collect(
+                Collectors.toSet());
+
+        if (!intersection.isEmpty()) {
+          sdg.getPDG(v.getNode()).addEdge(o, v);
+          System.out.println("ADDING EDGE \n \t from: " + o + "\n\tto:   " + v + "\n\n");
+          if (!sdg.getPDG(v.getNode()).equals(sdg.getPDG(o.getNode()))) {
+            sdg.getPDG(o.getNode()).addEdge(o, v);
+            System.out.println("ADDING EDGE \n \t from: " + v + "\n\tto:   " + o + "\n\n");
+          }
+
         }
       });
     });
@@ -224,7 +230,6 @@ public class Slicer {
     //System.out.println("GRAPH: "+graph);
     return new Slicer().slice(sdg, ss, backward);
   }
-
 
 
   /**

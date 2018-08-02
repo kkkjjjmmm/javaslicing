@@ -44,8 +44,8 @@ public class Example {
 		}else {
 			l = Util.Bernoulli(0.4);
 		}
-		l = fake(l);
-		return l;
+		s = fake(s);
+		return s;
 	}
 	
 	public static boolean fake(boolean b) {
