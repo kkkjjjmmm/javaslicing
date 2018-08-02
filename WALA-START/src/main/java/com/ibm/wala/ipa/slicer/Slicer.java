@@ -160,7 +160,7 @@ public class Slicer {
     for (Statement stmt : graph.nodes()) {
       System.out.println(stmt);
       for (Statement succ : graph.successors(stmt)) {
-        System.out.println(succ);
+        System.out.println("  >>" + succ);
       }
     }
     System.out.println("-------------------------------------");
@@ -211,22 +211,6 @@ public class Slicer {
     } catch (WalaException e) {
       e.printStackTrace();
     }
-
-    PrintStream out;
-    try {
-      out = new PrintStream("graphDump.txt");
-
-      System.setOut(out);
-      //System.out.println(sdg);
-      Set<EndpointPair<Statement>> ed = graph.edges();
-      Iterator<EndpointPair<Statement>> edit = ed.iterator();
-      while (edit.hasNext()) {
-        System.out.println(edit.next());
-      }
-    } catch (FileNotFoundException e) {
-      e.printStackTrace();
-    }
-
     //System.out.println("GRAPH: "+graph);
     return new Slicer().slice(sdg, ss, backward);
   }
