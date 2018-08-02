@@ -53,12 +53,6 @@ public class OBSVisitor extends ModifierVisitor<List<ExpressionStmt>> {
 			return n;
 		}
 		Expression obsArg = args.get(0);
-//		if(obsArg.isUnaryExpr()) {
-//			UnaryExpr unary = obsArg.asUnaryExpr();
-//			if(unary.getOperator().equals(UnaryExpr.Operator.LOGICAL_COMPLEMENT)) {
-//				System.out.println("the operator is "+ unary.getOperator());
-//			}
-//		}
 		if (obsArg instanceof NameExpr && arg != null) {
 			NameExpr variableInsideObs = (NameExpr) obsArg;
 			arg.add(new ExpressionStmt(
@@ -101,13 +95,13 @@ public class OBSVisitor extends ModifierVisitor<List<ExpressionStmt>> {
 	
 	
 	
-	public static void main(String[] args) throws FileNotFoundException {
-		FileInputStream in = new FileInputStream("/home/jiaming/WALA/WALA-START/src/main/java/kkkjjjmmm/test/Expriment2.java");
-		CompilationUnit cu = JavaParser.parse(in);
-		cu.accept(new OBSVisitor(), null);
-		cu.accept(new SVFVisitor(), null);
-		System.out.println(cu);
-	}
+//	public static void main(String[] args) throws FileNotFoundException {
+//		FileInputStream in = new FileInputStream("/home/jiaming/WALA/WALA-START/src/main/java/kkkjjjmmm/test/Expriment2.java");
+//		CompilationUnit cu = JavaParser.parse(in);
+//		cu.accept(new OBSVisitor(), null);
+//		cu.accept(new SVFVisitor(), null);
+//		System.out.println(cu);
+//	}
 	
 	// observe(f == false)
 	// observe(f == 1)

@@ -26,6 +26,7 @@ import com.ibm.wala.dataflow.IFDS.PathEdge;
 import com.ibm.wala.dataflow.IFDS.TabulationDomain;
 import com.ibm.wala.dataflow.IFDS.TabulationResult;
 import com.ibm.wala.dataflow.IFDS.UnorderedDomain;
+import com.ibm.wala.examples.drivers.SlicerTest;
 import com.ibm.wala.ipa.callgraph.CGNode;
 import com.ibm.wala.ipa.callgraph.CallGraph;
 import com.ibm.wala.ipa.callgraph.propagation.InstanceKey;
@@ -50,6 +51,7 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.Set;
+import java.util.stream.Collector;
 import java.util.stream.Collectors;
 
 /**
@@ -168,17 +170,20 @@ public class Slicer {
 //    Graph<Statement> transClosure = Graphs.transitiveClosure(graph);
 
     //TODO Quick and dirty filtering of observe nodes based on string representaion
-    Set<Statement> sliceTargets = graph.nodes().stream()
-        .filter(
-            n -> n.getKind().equals(Kind.NORMAL) && n.toString()
-                .contains("invokestatic") && n.toString().contains("fake("))
-        .collect(Collectors.toSet());
+    
+//    Set<Statement> sliceTargets = graph.nodes().stream()
+//        .filter(n -> n.getKind().equals(Kind.NORMAL) && n.toString()
+//        .contains("invokestatic") && n.toString().contains("fake("))
+//        .collect(Collectors.toSet());
+    Set<Statement> sliceTargets = new HashSet<Statement>();
+    sliceTargets.addAll(ss);
 
     Set<Statement> observeNodes = graph.nodes().stream()
         .filter(
             n -> n.getKind().equals(Kind.NORMAL) && n.toString()
                 .contains("invokestatic") && n.toString()
-                .contains("Observe(")).collect(Collectors.toSet());
+                .contains("Lkkkjjjmmm/slicer/Util, Observe(Z)V")).collect(Collectors.toSet());
+                //.contains("Observe(")).collect(Collectors.toSet());
 
     final Graph<Statement> transposedGraph = Graphs.transpose(graph);
 
@@ -188,11 +193,9 @@ public class Slicer {
         Set<Statement> reachableFromObserve = Graphs.reachableNodes(transposedGraph, o);
         Set<Statement> reachableFromTargetVariable = Graphs.reachableNodes(transposedGraph, v);
 
-        Set<Statement> intersection = Sets
-            .intersection(reachableFromObserve, reachableFromTargetVariable).stream().filter(
-                n -> n.getKind().equals(Kind.NORMAL) || n.getKind().equals(Kind.NORMAL_RET_CALLER)
-                    || n.getKind().equals(Kind.NORMAL_RET_CALLEE)).collect(
-                Collectors.toSet());
+        Set<Statement> intersection = Sets.intersection(reachableFromObserve, reachableFromTargetVariable)
+        		.stream().filter(n -> n.getKind().equals(Kind.NORMAL) || n.getKind().equals(Kind.NORMAL_RET_CALLER)
+                 || n.getKind().equals(Kind.NORMAL_RET_CALLEE)).collect(Collectors.toSet());
 
         if (!intersection.isEmpty()) {
           sdg.getPDG(v.getNode()).addEdge(o, v);
@@ -206,12 +209,12 @@ public class Slicer {
       });
     });
 
-    try {
-      DotUtil.writeDotFile(sdg, null, "slice", "slice.dot");
-    } catch (WalaException e) {
-      e.printStackTrace();
-    }
-    //System.out.println("GRAPH: "+graph);
+//    try {
+//      DotUtil.writeDotFile(sdg, null, "slice", "slice.dot");
+//    } catch (WalaException e) {
+//      e.printStackTrace();
+//    }
+
     return new Slicer().slice(sdg, ss, backward);
   }
 
@@ -430,46 +433,17 @@ public class Slicer {
 
     private final boolean backward;
 
-    // TODO store observe variables in a set here
-    private final Set<String> observevariable = new HashSet<String>();
-    private final Set<String> returnvariable = new HashSet<String>();
-
     public SliceProblem(Collection<Statement> roots, ISDG sdg, boolean backward) {
       this.roots = roots;
       this.backward = backward;
       SDGSupergraph forwards = new SDGSupergraph(sdg, backward);
 
-      // TODO add INF(O,G) to forwards
       if (backward) {
         this.supergraph = BackwardsSupergraph.make(forwards);
       } else {
         this.supergraph = forwards;
       }
       f = new SliceFunctions();
-    }
-
-    public static synchronized Statement ssaInstruction2Statement(CGNode node, SSAInstruction s,
-        Integer instructionIndices, IR ir) {
-      if (node == null) {
-        throw new IllegalArgumentException("null node");
-      }
-      if (s == null) {
-        throw new IllegalArgumentException("null s");
-      }
-      if (s instanceof SSAPhiInstruction) {
-        SSAPhiInstruction phi = (SSAPhiInstruction) s;
-        return new PhiStatement(node, phi);
-      } else if (s instanceof SSAPiInstruction) {
-        SSAPiInstruction pi = (SSAPiInstruction) s;
-        return new PiStatement(node, pi);
-      } else if (s instanceof SSAGetCaughtExceptionInstruction) {
-        return new GetCaughtExceptionStatement(node, ((SSAGetCaughtExceptionInstruction) s));
-      } else {
-        if (instructionIndices == null) {
-          Assertions.UNREACHABLE(s.toString() + "\nnot found in map of\n" + ir);
-        }
-        return new NormalStatement(node, instructionIndices.intValue());
-      }
     }
 
     /*
