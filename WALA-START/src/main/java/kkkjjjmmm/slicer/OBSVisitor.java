@@ -53,21 +53,35 @@ public class OBSVisitor extends ModifierVisitor<List<ExpressionStmt>> {
 			return n;
 		}
 		Expression obsArg = args.get(0);
+
 		if (obsArg instanceof NameExpr && arg != null) {
 			NameExpr variableInsideObs = (NameExpr) obsArg;
 			arg.add(new ExpressionStmt(
 					new AssignExpr(variableInsideObs, new BooleanLiteralExpr(true), AssignExpr.Operator.ASSIGN)));
+		}else if(obsArg instanceof UnaryExpr && arg != null) {
+			UnaryExpr uexp = (UnaryExpr) obsArg;
+			if(uexp.getOperator().equals(UnaryExpr.Operator.LOGICAL_COMPLEMENT)) {	
+				arg.add(new ExpressionStmt(
+						new AssignExpr(uexp.getExpression(), new BooleanLiteralExpr(false), AssignExpr.Operator.ASSIGN)));
+			}
 		}else if(obsArg instanceof BinaryExpr && arg != null){
 			BinaryExpr v = (BinaryExpr) obsArg;
-			if(v.getOperator().equals(BinaryExpr.Operator.EQUALS)) {
-				arg.add(new ExpressionStmt(
-						new AssignExpr(v.getLeft(), v.getRight(), AssignExpr.Operator.ASSIGN)));
+			if(v.getOperator().equals(BinaryExpr.Operator.EQUALS)) {				
+				if(v.getRight().isBooleanLiteralExpr()) {
+					arg.add(new ExpressionStmt(
+							new AssignExpr(v.getLeft(), v.getRight(), AssignExpr.Operator.ASSIGN)));
+				}else if (v.getRight().isNameExpr()){
+					arg.add(new ExpressionStmt(
+							new AssignExpr(v.getLeft(), v.getRight(), AssignExpr.Operator.ASSIGN)));
+					arg.add(new ExpressionStmt(
+							new AssignExpr(v.getRight(), v.getLeft(), AssignExpr.Operator.ASSIGN)));
+				}
+				
 			}else if(v.getOperator().equals(BinaryExpr.Operator.AND)) {
 				Expression left = v.getLeft();
 				Expression right = v.getRight();
 				Set<Expression> expInV = new HashSet<Expression>();			
-				while (left instanceof BinaryExpr
-						&& ((BinaryExpr) left).getOperator().equals(BinaryExpr.Operator.AND)) {
+				while (left instanceof BinaryExpr && ((BinaryExpr) left).getOperator().equals(BinaryExpr.Operator.AND)) {
 					expInV.add(((BinaryExpr) left).getRight());
 					left = ((BinaryExpr) left).getLeft();
 				}
@@ -80,19 +94,34 @@ public class OBSVisitor extends ModifierVisitor<List<ExpressionStmt>> {
 						NameExpr nameExp = (NameExpr) exp;
 						arg.add(new ExpressionStmt(
 								new AssignExpr(nameExp, new BooleanLiteralExpr(true), AssignExpr.Operator.ASSIGN)));
+					}else if(exp instanceof UnaryExpr) {
+						UnaryExpr uexp = (UnaryExpr) exp;
+						if(uexp.getOperator().equals(UnaryExpr.Operator.LOGICAL_COMPLEMENT)) {	
+							arg.add(new ExpressionStmt(
+									new AssignExpr(uexp.getExpression(), new BooleanLiteralExpr(false), AssignExpr.Operator.ASSIGN)));
+						}
 					}else if(exp instanceof BinaryExpr) {
 						BinaryExpr binaryExp = (BinaryExpr) exp;
 						if(binaryExp.getOperator().equals(BinaryExpr.Operator.EQUALS)) {
-							arg.add(new ExpressionStmt(
-									new AssignExpr(binaryExp.getLeft(), binaryExp.getRight(), AssignExpr.Operator.ASSIGN)));
+							if(binaryExp.getRight().isBooleanLiteralExpr()) {
+								arg.add(new ExpressionStmt(
+										new AssignExpr(binaryExp.getLeft(), binaryExp.getRight(), AssignExpr.Operator.ASSIGN)));
+							}else if (binaryExp.getRight().isNameExpr()){
+								arg.add(new ExpressionStmt(
+										new AssignExpr(binaryExp.getLeft(), binaryExp.getRight(), AssignExpr.Operator.ASSIGN)));
+								arg.add(new ExpressionStmt(
+										new AssignExpr(binaryExp.getRight(), binaryExp.getLeft(), AssignExpr.Operator.ASSIGN)));
+							}
 						} 
 					}
 				}
 			}
+//           else if(v.getOperator().equals(BinaryExpr.Operator.OR)) {
+//				
+//			}
 		}
 		return n;
 	}
-	
 	
 	
 //	public static void main(String[] args) throws FileNotFoundException {

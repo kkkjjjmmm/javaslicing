@@ -79,16 +79,7 @@ public class DoSlice {
 			CGNode callerNode = SlicerTest.findMethod(cg, srcCaller);
 			Statement s = SlicerTest.findCallTo(callerNode, srcCallee);
 			System.err.println("Statement: " + s);
-//			
-//			IR ir = callerNode.getIR();
-//			Iterator<SSAInstruction> it = ir.iterateAllInstructions();
-//			while(it.hasNext()) {
-//				SSAInstruction ins = it.next();
-//				if(ins.toString().contains("Observe")) {
-//					ISSABasicBlock block = ir.getBasicBlockForInstruction(ins);
-//					System.out.println(block.getNumber());
-//				}
-//			}
+
 			// compute the slice as a collection of statements
 			Collection<Statement> slice = null;
 			if (goBackward) {
@@ -117,47 +108,48 @@ public class DoSlice {
 			Table<String, String, Set<Integer>> statements = computeSliceStatements(p.getProperty("appJar"),
 					p.getProperty("mainClass"), p.getProperty("srcCaller"), p.getProperty("srcCallee"), goBackward(p));
 			
+			
 			for (String fullClassName : statements.rowKeySet()) {
 				int lastSlash = fullClassName.lastIndexOf('/');
 				String packageName = fullClassName.substring(1, lastSlash);
 				String className = fullClassName.substring(lastSlash + 1);
-				System.out.println(packageName);
-				System.out.println(className);
 				CompilationUnit cu = null;
 				
 				Set<Integer> sliceStatements = new TreeSet<>();
 				for (Map.Entry<String, Set<Integer>> methodAndLines : statements.row(fullClassName).entrySet()) {
+					System.out.println(">> " + methodAndLines);
 					String methodName = methodAndLines.getKey();
 					Set<Integer> diffStatements = methodAndLines.getValue();
 					sliceStatements.addAll(diffStatements);
+					
 					ModifierVisitor<Void> mv = new SlicerVisitor(diffStatements);
 
 					SourceRoot srcRoot = new SourceRoot(Paths.get(p.getProperty("path")));
 					cu = srcRoot.parse(packageName, className + ".java");
 					
-					Visitable newTree = cu.accept(mv, null);
-
-					srcRoot = new SourceRoot(Paths.get(p.getProperty("path")));
-					cu = srcRoot.parse(packageName, className + ".java");
-
-					for (MethodDeclaration newMD : ((Node) newTree).findAll(MethodDeclaration.class)) {
-						MethodDeclaration oldMD = cu.findFirst(MethodDeclaration.class,
-								md -> md.getNameAsString().equals(newMD.getNameAsString())).get();
-						List<String> sliceNameExprs = newMD.findAll(NameExpr.class).stream()
-								.map(ne -> ne.getNameAsString()).collect(Collectors.toList());
-						oldMD.findAll(VariableDeclarationExpr.class).stream().forEach(vd -> {
-							for (VariableDeclarator var : vd.getVariables()) {
-								if (sliceNameExprs.contains(var.getName().asString())) {
-									sliceStatements.add(vd.getBegin().get().line);
-								}
-							}
-						});
-					}
+					Visitable newTree = cu.accept(mv, null);//newTree is a CompileUnit, this is the new cu
+					System.out.println(newTree);
+//					srcRoot = new SourceRoot(Paths.get(p.getProperty("path")));
+//					cu = srcRoot.parse(packageName, className + ".java");//get the old cu
+//					for (MethodDeclaration newMD : ((Node) newTree).findAll(MethodDeclaration.class)) {
+//	                    
+//						MethodDeclaration oldMD = cu.findFirst(MethodDeclaration.class,
+//								md -> md.getNameAsString().equals(newMD.getNameAsString())).get();
+//						List<String> sliceNameExprs = newMD.findAll(NameExpr.class).stream()
+//								.map(ne -> ne.getNameAsString()).collect(Collectors.toList());
+//						oldMD.findAll(VariableDeclarationExpr.class).stream().forEach(vd -> {
+//							for (VariableDeclarator var : vd.getVariables()) {
+//								if (sliceNameExprs.contains(var.getName().asString())) {
+//									sliceStatements.add(vd.getBegin().get().line);
+//								}
+//							}
+//						});
+//					}
 				}
-				System.out.println(">> " + statements);
-				ModifierVisitor<Void> mv = new SlicerVisitor(sliceStatements);
-				Visitable newTree = cu.accept(mv, null);
-				System.out.println(newTree);
+//				System.out.println(">> " + statements);
+//				ModifierVisitor<Void> mv = new SlicerVisitor(sliceStatements);
+//				Visitable newTree = cu.accept(mv, null);
+//				System.out.println(newTree);
 			}
 		} catch (CancelException e) {
 			e.printStackTrace();

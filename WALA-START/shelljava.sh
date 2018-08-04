@@ -5,7 +5,7 @@ echo "---------start---------"
 OUTPUT_FOLDER="parser_output"
 TARGET="$1"
 FILENAME="$(basename $1)"
-LIBS="src/main/java/kkkjjjmmm/slicer/Util.java"
+LIBS="src/main/java/kkkjjjmmm/slicer/ProbUtil.java"
 DESTINATION="src/main/java/kkkjjjmmm/modified/${FILENAME}"
 
 #MAINCLASS=$2 # "Lkkkjjjmmm/test/Example"
@@ -15,7 +15,7 @@ DESTINATION="src/main/java/kkkjjjmmm/modified/${FILENAME}"
 rm -r $OUTPUT_FOLDER
 mkdir $OUTPUT_FOLDER
 mkdir -p "$OUTPUT_FOLDER/kkkjjjmmm/slicer"
-cp $LIBS "$OUTPUT_FOLDER/kkkjjjmmm/slicer/Util.java"
+cp $LIBS "$OUTPUT_FOLDER/kkkjjjmmm/slicer/ProbUtil.java"
 
 java -jar doparser.jar $TARGET $OUTPUT_FOLDER
 

@@ -182,7 +182,7 @@ public class Slicer {
         .filter(
             n -> n.getKind().equals(Kind.NORMAL) && n.toString()
                 .contains("invokestatic") && n.toString()
-                .contains("Lkkkjjjmmm/slicer/Util, Observe(Z)V")).collect(Collectors.toSet());
+                .contains("ProbUtil, Observe(Z)V")).collect(Collectors.toSet());
                 //.contains("Observe(")).collect(Collectors.toSet());
 
     final Graph<Statement> transposedGraph = Graphs.transpose(graph);

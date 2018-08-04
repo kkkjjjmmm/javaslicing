@@ -2,7 +2,7 @@ package kkkjjjmmm.slicer;
 
 import java.util.Random;
 
-public class Util {
+public class ProbUtil {
 	
 	private static Random random;    
     private static long seed;        
