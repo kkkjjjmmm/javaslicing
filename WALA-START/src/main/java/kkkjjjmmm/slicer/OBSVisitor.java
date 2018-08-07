@@ -6,6 +6,7 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 
 import com.github.javaparser.JavaParser;
@@ -33,7 +34,7 @@ public class OBSVisitor extends ModifierVisitor<List<ExpressionStmt>> {
 		if (!additionalStatements.isEmpty()) {
 			BlockStmt nestedBlock = new BlockStmt();
 			nestedBlock.addStatement(n);
-			for (ExpressionStmt stmt : additionalStatements) {
+			for (ExpressionStmt stmt : additionalStatements) {				
 				nestedBlock.addStatement(stmt);
 			}
 			return nestedBlock;
@@ -66,16 +67,16 @@ public class OBSVisitor extends ModifierVisitor<List<ExpressionStmt>> {
 			}
 		}else if(obsArg instanceof BinaryExpr && arg != null){
 			BinaryExpr v = (BinaryExpr) obsArg;
-			if(v.getOperator().equals(BinaryExpr.Operator.EQUALS)) {				
-				if(v.getRight().isBooleanLiteralExpr()) {
-					arg.add(new ExpressionStmt(
-							new AssignExpr(v.getLeft(), v.getRight(), AssignExpr.Operator.ASSIGN)));
-				}else if (v.getRight().isNameExpr()){
+			if(v.getOperator().equals(BinaryExpr.Operator.EQUALS)) {
+				if (v.getRight().isNameExpr()){
 					arg.add(new ExpressionStmt(
 							new AssignExpr(v.getLeft(), v.getRight(), AssignExpr.Operator.ASSIGN)));
 					arg.add(new ExpressionStmt(
 							new AssignExpr(v.getRight(), v.getLeft(), AssignExpr.Operator.ASSIGN)));
-				}
+				}else {
+					arg.add(new ExpressionStmt(
+							new AssignExpr(v.getLeft(), v.getRight(), AssignExpr.Operator.ASSIGN)));
+				} 
 				
 			}else if(v.getOperator().equals(BinaryExpr.Operator.AND)) {
 				Expression left = v.getLeft();
@@ -124,13 +125,13 @@ public class OBSVisitor extends ModifierVisitor<List<ExpressionStmt>> {
 	}
 	
 	
-//	public static void main(String[] args) throws FileNotFoundException {
-//		FileInputStream in = new FileInputStream("/home/jiaming/WALA/WALA-START/src/main/java/kkkjjjmmm/test/Expriment2.java");
-//		CompilationUnit cu = JavaParser.parse(in);
-//		cu.accept(new OBSVisitor(), null);
-//		cu.accept(new SVFVisitor(), null);
-//		System.out.println(cu);
-//	}
+	public static void main(String[] args) throws FileNotFoundException {
+		FileInputStream in = new FileInputStream("/home/jiaming/WALA/WALA-START/src/main/java/kkkjjjmmm/test/Example3.java");
+		CompilationUnit cu = JavaParser.parse(in);
+		cu.accept(new OBSVisitor(), null);
+		cu.accept(new SVFVisitor(), null);
+		System.out.println(cu);
+	}
 	
 	// observe(f == false)
 	// observe(f == 1)
