@@ -71,3 +71,4 @@ org\/openide\/.*
 com\/ibm\/crypto\/.*
 com\/ibm\/security\/.*
 org\/apache\/xerces\/.*
+org\/apache\/commons\/math3\/.*
