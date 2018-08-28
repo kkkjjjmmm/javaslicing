@@ -3,11 +3,9 @@ package kkkjjjmmm.slicer;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
-import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-
 import com.github.javaparser.JavaParser;
 import com.github.javaparser.ast.CompilationUnit;
 
@@ -27,6 +25,7 @@ public class DoParser {
 		CompilationUnit cu = JavaParser.parse(in);
 		cu.accept(new OBSVisitor(), null);
 		cu.accept(new SVFVisitor(), null);
+		cu.accept(new MethodVisitor(), null);
 		
 		File output = new File(args[1]);
 		if (!output.isDirectory()) {
@@ -43,10 +42,6 @@ public class DoParser {
 		Files.createDirectories(pathToOutput.getParent());
 		Files.write(pathToOutput, bArray);
 		
-//		ProcessBuilder pb = new ProcessBuilder();
-//		pb.command("jar", "-cvf", "Example.jar", "Example.class");
-//		Process proc = pb.start();
-//		proc.waitFor();
 	}
 
 }

@@ -10,7 +10,7 @@ LIBS1="commons-math3-3.6.1-src/src/main/java/org/apache/commons/math3"
 #LIBS1="commons-math3-3.6.1-src/src/main/java/org/apache/commons/math3/distribution"
 #LIBS2="commons-math3-3.6.1-src/src/main/java/org/apache/commons/math3/exception"
 #LIBS3="commons-math3-3.6.1-src/src/main/java/org/apache/commons/math3/util"
-DESTINATION="src/main/java/kkkjjjmmm/modified/${FILENAME}"
+#DESTINATION="src/main/java/kkkjjjmmm/modified/${FILENAME}"
 
 rm -r $OUTPUT_FOLDER
 mkdir $OUTPUT_FOLDER
@@ -26,7 +26,7 @@ java -jar doparser.jar $TARGET $OUTPUT_FOLDER
 
 cd $OUTPUT_FOLDER
 find . -name "*.java" | xargs javac  
-jar -cvf transformed.jar *
+jar -cf transformed.jar *
 
 echo "--------finished-------"
 
