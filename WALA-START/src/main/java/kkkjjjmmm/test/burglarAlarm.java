@@ -18,7 +18,7 @@ public class burglarAlarm {
 			phoneWorking = ProbUtil.flip(0.99);
 		}
 		
-		int maryWakes = 0;
+		int maryWakes = write(0);
 	    if (alarm){
 	        if (earthquakebool){
 	            maryWakes = ProbUtil.flip(0.8);
@@ -39,6 +39,14 @@ public class burglarAlarm {
 	
 	public static int fake(int y) {
 		return y;
+	}
+	
+	public static int write(int y) {
+		return y;
+	}
+	
+	public static int writeChain(int currentValue, int previousValue) {
+		return currentValue;
 	}
 
 }

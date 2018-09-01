@@ -1,28 +1,29 @@
 package kkkjjjmmm.test;
 
-import kkkjjjmmm.slicer.Util;
+import kkkjjjmmm.slicer.ProbUtil;
 
-public class Example2 {
+public class WhileB {
 	public static void main(String[] args) {
 		boolean x = SliceL();
 		System.out.println(x);
 	}
+	
 	public static boolean SliceL() {
 		boolean x, b, c;
-		x = Util.Bernoulli(0.5);
+		x = ProbUtil.Bernoulli(0.5);
 		b = x;
-		c = Util.Bernoulli(0.5);
+		c = ProbUtil.Bernoulli(0.5);
 		while(c) {
 			b = !b;
-			c = Util.Bernoulli(0.5);
+			c = ProbUtil.Bernoulli(0.5);
 		}
 		
+		ProbUtil.Observe(b == false);
+		
 		b = fake(b);
-		Util.Observe(b);
-		return x;
+		return b;
 	}
-	
-	
+		
 	public static boolean fake(boolean b) {
 		return b;
 	}

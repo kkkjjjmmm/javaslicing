@@ -132,10 +132,12 @@ public class OBSVisitor extends ModifierVisitor<List<ExpressionStmt>> {
 		
 	
 	public static void main(String[] args) throws FileNotFoundException {
-		FileInputStream in = new FileInputStream("/home/jiaming/WALA/WALA-START/src/main/java/kkkjjjmmm/test/Example.java");
+		FileInputStream in = new FileInputStream("/home/jiaming/WALA/WALA-START/src/main/java/kkkjjjmmm/test/burglarAlarm.java");
 		CompilationUnit cu = JavaParser.parse(in);
 		cu.accept(new OBSVisitor(), null);
+		System.out.println(cu);
 		cu.accept(new SVFVisitor(), null);
+		System.out.println(cu);
 		cu.accept(new MethodVisitor(), null);
 		System.out.println(cu);
 	}

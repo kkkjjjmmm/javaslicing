@@ -155,9 +155,9 @@ public class Slicer {
 
     System.out.println("--- edges on the graph (from sdg) ---");
 
-    Set<Statement> valueCarriers = graph.nodes().stream()
-        .filter(n -> n instanceof ValueNumberCarrier && n.getKind().equals(Kind.NORMAL)).collect(
-            Collectors.toSet());
+//    Set<Statement> valueCarriers = graph.nodes().stream()
+//        .filter(n -> n instanceof ValueNumberCarrier && n.getKind().equals(Kind.NORMAL)).collect(
+//            Collectors.toSet());
 
     for (Statement stmt : graph.nodes()) {
       System.out.println(stmt);
@@ -179,8 +179,7 @@ public class Slicer {
     sliceTargets.addAll(ss);
 
     Set<Statement> observeNodes = graph.nodes().stream()
-        .filter(
-            n -> n.getKind().equals(Kind.NORMAL) && n.toString()
+        .filter(n -> n.getKind().equals(Kind.NORMAL) && n.toString()
                 .contains("invokestatic") && n.toString()
                 .contains("ProbUtil, Observe(Z)V")).collect(Collectors.toSet());
                 //.contains("Observe(")).collect(Collectors.toSet());
@@ -197,14 +196,13 @@ public class Slicer {
         		.stream().filter(n -> n.getKind().equals(Kind.NORMAL) || n.getKind().equals(Kind.NORMAL_RET_CALLER)
                  || n.getKind().equals(Kind.NORMAL_RET_CALLEE)).collect(Collectors.toSet());
 
-        if (!intersection.isEmpty()) {
-          sdg.getPDG(v.getNode()).addEdge(o, v);
-          System.out.println("ADDING EDGE \n \t from: " + o + "\n\tto:   " + v + "\n\n");
-          if (!sdg.getPDG(v.getNode()).equals(sdg.getPDG(o.getNode()))) {
-            sdg.getPDG(o.getNode()).addEdge(o, v);
-            System.out.println("ADDING EDGE \n \t from: " + v + "\n\tto:   " + o + "\n\n");
-          }
-
+        if(!intersection.isEmpty()) {
+            sdg.getPDG(v.getNode()).addEdge(o, v);
+            System.out.println("ADDING EDGE \n \t from: " + o + "\n\tto:   " + v + "\n\n");
+            if(!sdg.getPDG(v.getNode()).equals(sdg.getPDG(o.getNode()))) {
+                sdg.getPDG(o.getNode()).addEdge(o, v);
+                System.out.println("ADDING EDGE \n \t from: " + v + "\n\tto:   " + o + "\n\n");
+            }
         }
       });
     });

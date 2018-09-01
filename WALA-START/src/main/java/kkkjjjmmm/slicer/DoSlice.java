@@ -1,11 +1,18 @@
 package kkkjjjmmm.slicer;
 
+import java.io.IOException;
+import java.nio.file.Paths;
+import java.util.Collection;
+import java.util.List;
+import java.util.Map;
+import java.util.Properties;
+import java.util.Set;
+import java.util.stream.Collectors;
+
+import com.github.javaparser.ParserConfiguration;
 import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.Node;
-import com.github.javaparser.ast.body.MethodDeclaration;
-import com.github.javaparser.ast.body.VariableDeclarator;
 import com.github.javaparser.ast.expr.NameExpr;
-import com.github.javaparser.ast.expr.VariableDeclarationExpr;
 import com.github.javaparser.ast.visitor.ModifierVisitor;
 import com.github.javaparser.ast.visitor.Visitable;
 import com.github.javaparser.utils.SourceRoot;
@@ -29,29 +36,16 @@ import com.ibm.wala.ipa.slicer.SDG;
 import com.ibm.wala.ipa.slicer.Slicer.ControlDependenceOptions;
 import com.ibm.wala.ipa.slicer.Slicer.DataDependenceOptions;
 import com.ibm.wala.ipa.slicer.Statement;
-import com.ibm.wala.ssa.IR;
-import com.ibm.wala.ssa.ISSABasicBlock;
-import com.ibm.wala.ssa.SSAInstruction;
 import com.ibm.wala.util.CancelException;
 import com.ibm.wala.util.WalaException;
 import com.ibm.wala.util.config.AnalysisScopeReader;
 import com.ibm.wala.util.io.CommandLine;
 import com.ibm.wala.util.io.FileProvider;
-import java.io.IOException;
-import java.nio.file.Paths;
-import java.util.Collection;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
-import java.util.Properties;
-import java.util.Set;
-import java.util.TreeSet;
-import java.util.stream.Collectors;
 
 public class DoSlice {
 
 	private static final DataDependenceOptions D_OPTIONS = DataDependenceOptions.NO_EXCEPTIONS;
-	private static final ControlDependenceOptions C_OPTIONS = ControlDependenceOptions.NO_EXCEPTIONAL_EDGES;//ControlDependenceOptions.NO_EXCEPTIONAL_EDGES;
+	private static final ControlDependenceOptions C_OPTIONS = ControlDependenceOptions.NO_EXCEPTIONAL_EDGES;// ControlDependenceOptions.NO_EXCEPTIONAL_EDGES;
 
 	public static Table<String, String, Set<Integer>> computeSliceStatements(String appJar, String mainClass,
 			String srcCaller, String srcCallee, boolean goBackward)
@@ -114,42 +108,35 @@ public class DoSlice {
 				String packageName = fullClassName.substring(1, lastSlash);
 				String className = fullClassName.substring(lastSlash + 1);
 				CompilationUnit cu = null;
-				
-				Set<Integer> sliceStatements = new TreeSet<>();
+
 				for (Map.Entry<String, Set<Integer>> methodAndLines : statements.row(fullClassName).entrySet()) {
 					System.out.println(">> " + methodAndLines);
-					String methodName = methodAndLines.getKey();
 					Set<Integer> diffStatements = methodAndLines.getValue();
-					sliceStatements.addAll(diffStatements);
 					
-					ModifierVisitor<Void> mv = new SlicerVisitor(diffStatements);
-
 					SourceRoot srcRoot = new SourceRoot(Paths.get(p.getProperty("path")));
 					cu = srcRoot.parse(packageName, className + ".java");
+					cu.accept(new NoDecelarationVisitor(diffStatements),null);
+					System.out.println(cu);
+					List<Node> variablesUsedInTheSlice = cu.accept(new DeclaratorVisitor(), null);
+					List<Node> temp = variablesUsedInTheSlice;	
 					
-					Visitable newTree = cu.accept(mv, null);//newTree is a CompileUnit, this is the new cu
-					System.out.println(newTree);
-//					srcRoot = new SourceRoot(Paths.get(p.getProperty("path")));
-//					cu = srcRoot.parse(packageName, className + ".java");//get the old cu
-//					for (MethodDeclaration newMD : ((Node) newTree).findAll(MethodDeclaration.class)) {
-//	                    
-//						MethodDeclaration oldMD = cu.findFirst(MethodDeclaration.class,
-//								md -> md.getNameAsString().equals(newMD.getNameAsString())).get();
-//						List<String> sliceNameExprs = newMD.findAll(NameExpr.class).stream()
-//								.map(ne -> ne.getNameAsString()).collect(Collectors.toList());
-//						oldMD.findAll(VariableDeclarationExpr.class).stream().forEach(vd -> {
-//							for (VariableDeclarator var : vd.getVariables()) {
-//								if (sliceNameExprs.contains(var.getName().asString())) {
-//									sliceStatements.add(vd.getBegin().get().line);
-//								}
-//							}
-//						});
-//					}
+					cu = srcRoot.parse(packageName, className + ".java");
+			        cu.accept(new SlicerVisitor(diffStatements), null);
+			        System.err.println(cu);
+			        cu.accept(new DeclarationPruningVisitor(), variablesUsedInTheSlice);
+			        variablesUsedInTheSlice = cu.accept(new DeclaratorVisitor(), null);
+			        
+			        while(!(temp.equals(variablesUsedInTheSlice))) {
+			        	cu = srcRoot.parse(packageName, className + ".java");
+				        cu.accept(new SlicerVisitor(diffStatements), null);
+				        cu.accept(new DeclarationPruningVisitor(), variablesUsedInTheSlice);
+				        temp = variablesUsedInTheSlice;
+				        variablesUsedInTheSlice = cu.accept(new DeclaratorVisitor(), null);
+			        }
+			        System.out.println(cu);
+//			        System.out.println("Variables in the slice: "+
+//			        		variablesUsedInTheSlice.stream().map(varInTheSlice -> ((NameExpr) varInTheSlice).getName()).collect(Collectors.toSet()));
 				}
-//				System.out.println(">> " + statements);
-//				ModifierVisitor<Void> mv = new SlicerVisitor(sliceStatements);
-//				Visitable newTree = cu.accept(mv, null);
-//				System.out.println(newTree);
 			}
 		} catch (CancelException e) {
 			e.printStackTrace();
@@ -160,6 +147,13 @@ public class DoSlice {
 
 	private static boolean goBackward(Properties p) {
 		return !p.getProperty("dir", "backward").equals("forward");
+	}
+	
+	private boolean listChanged(List<Node> a, List<Node> b) {
+		if(a.equals(b)) {
+			return false;
+		}
+		return true;
 	}
 
 }
