@@ -11,38 +11,44 @@ import com.google.common.collect.Lists;
 
 public class DeclaratorVisitor extends GenericListVisitorAdapter<Node, Void> {
 
-	
 	public List<Node> visit(NameExpr n, Void arg){
 		List<Node> declaredVars = Lists.newArrayList();
-		Node temp = n;
-		boolean flag = false;
-		while(temp.getParentNode().isPresent()) {
-			temp = temp.getParentNode().get();
-			if(temp instanceof MethodCallExpr) {
-				if(((MethodCallExpr) temp).getScope().isPresent()) {
-					String scope = ((MethodCallExpr) temp).getScope().get().toString();
-					if(!(Character.isLowerCase(scope.charAt(0)))) {
-						flag = true;
-					}
-				}
-				Iterator<Expression> methodArguments = ((MethodCallExpr) temp).getArguments().iterator();
-				while(methodArguments.hasNext()) {
-					Expression argument = methodArguments.next();
-					if(argument.equals(n)) {
-						flag = false;
-						break;
-					}else {
-						flag = true;
-					}
-				}
-			}
-		}
-		if(flag!=true) {
-			declaredVars.add(n);
-			//System.out.println("NameExpr: "+n);
-		}
+		declaredVars.add(n);
 		return declaredVars;
 	}
+	
+	
+//	public List<Node> visit(NameExpr n, Void arg){
+//		List<Node> declaredVars = Lists.newArrayList();
+//		Node temp = n;
+//		boolean flag = false;
+//		while(temp.getParentNode().isPresent()) {
+//			temp = temp.getParentNode().get();
+//			if(temp instanceof MethodCallExpr) {
+//				if(((MethodCallExpr) temp).getScope().isPresent()) {
+//					String scope = ((MethodCallExpr) temp).getScope().get().toString();
+//					if(!(Character.isLowerCase(scope.charAt(0)))) {
+//						flag = true;
+//					}
+//				}
+//				Iterator<Expression> methodArguments = ((MethodCallExpr) temp).getArguments().iterator();
+//				while(methodArguments.hasNext()) {
+//					Expression argument = methodArguments.next();
+//					if(argument.equals(n)) {
+//						flag = false;
+//						break;
+//					}else {
+//						flag = true;
+//					}
+//				}
+//			}
+//		}
+//		if(flag!=true) {
+//			declaredVars.add(n);
+//			//System.out.println("NameExpr: "+n);
+//		}
+//		return declaredVars;
+//	}
 	
 	
 //	public List<Node> visit(final AssignExpr n, Void arg) {

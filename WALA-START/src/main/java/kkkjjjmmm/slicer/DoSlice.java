@@ -111,28 +111,31 @@ public class DoSlice {
 
 				for (Map.Entry<String, Set<Integer>> methodAndLines : statements.row(fullClassName).entrySet()) {
 					System.out.println(">> " + methodAndLines);
-					Set<Integer> diffStatements = methodAndLines.getValue();
-					
+					Set<Integer> diffStatements = methodAndLines.getValue();					
 					SourceRoot srcRoot = new SourceRoot(Paths.get(p.getProperty("path")));
-					cu = srcRoot.parse(packageName, className + ".java");
-					cu.accept(new NoDecelarationVisitor(diffStatements),null);
-					System.out.println(cu);
-					List<Node> variablesUsedInTheSlice = cu.accept(new DeclaratorVisitor(), null);
-					List<Node> temp = variablesUsedInTheSlice;	
+					
+					cu = srcRoot.parse(packageName, className + ".java");					
+					cu.accept(new NoDecelarationVisitor(diffStatements),null);//切片后不保留变量声明语句				
+					List<Node> variablesUsedInTheSlice = cu.accept(new DeclaratorVisitor(), null);//找到用的变量
+					List<Node> temp = variablesUsedInTheSlice;//复制一下
 					
 					cu = srcRoot.parse(packageName, className + ".java");
-			        cu.accept(new SlicerVisitor(diffStatements), null);
-			        System.err.println(cu);
-			        cu.accept(new DeclarationPruningVisitor(), variablesUsedInTheSlice);
-			        variablesUsedInTheSlice = cu.accept(new DeclaratorVisitor(), null);
+			        cu.accept(new SlicerVisitor(diffStatements), null);//先保留所有变量声明的语句（切片后）			        
+			        List<Node> allDeclaredVars = cu.accept(new DeclaredVariablesVisitor(), null); //找到所有声明的变量
+					allDeclaredVars.retainAll(variablesUsedInTheSlice);//求两个集合的交集
+			        cu.accept(new DeclarationPruningVisitor(), allDeclaredVars);//删掉没有用到的声明			        
+			        variablesUsedInTheSlice = cu.accept(new DeclaratorVisitor(), null);//找新结果中用到的vars
 			        
 			        while(!(temp.equals(variablesUsedInTheSlice))) {
 			        	cu = srcRoot.parse(packageName, className + ".java");
 				        cu.accept(new SlicerVisitor(diffStatements), null);
-				        cu.accept(new DeclarationPruningVisitor(), variablesUsedInTheSlice);
+				        allDeclaredVars = cu.accept(new DeclaredVariablesVisitor(), null);//重新计算一下，直接用不可以
+				        allDeclaredVars.retainAll(variablesUsedInTheSlice);//求两个集合的交集
+				        cu.accept(new DeclarationPruningVisitor(), allDeclaredVars);//删掉没有用到的声明
 				        temp = variablesUsedInTheSlice;
 				        variablesUsedInTheSlice = cu.accept(new DeclaratorVisitor(), null);
 			        }
+			        		      
 			        System.out.println(cu);
 //			        System.out.println("Variables in the slice: "+
 //			        		variablesUsedInTheSlice.stream().map(varInTheSlice -> ((NameExpr) varInTheSlice).getName()).collect(Collectors.toSet()));
